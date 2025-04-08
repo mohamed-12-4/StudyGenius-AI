@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Platform, StyleSheet } from 'react-native';
 import { Chrome as Home, BookOpen, Trophy, User, Brain } from 'lucide-react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export default function TabLayout() {
   return (
@@ -44,7 +45,9 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="account" size={size} color={color} />
+          ),
         }}
       />
     </Tabs>

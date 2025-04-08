@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { StyleSheet, View, KeyboardAvoidingView, Platform } from 'react-native';
 import { TextInput, Button, Text, Surface } from 'react-native-paper';
 import { Link, router } from 'expo-router';
-import { account } from '../../lib/appwrite';
+import { account, client } from '../../lib/appwrite';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -11,30 +12,53 @@ export default function LoginScreen() {
   const [error, setError] = useState('');
 
   const handleLogin = async () => {
+    setLoading(true);
+    setError('');
     try {
-      setLoading(true);
-      setError('');
+      // Delete any existing session (if exists)
+      try {
+        await account.deleteSession('current');
+      } catch (e) {
+        // Ignore if there is no session
+      }
+
+      // Create new email/password session
       await account.createEmailPasswordSession(email, password);
-      const session = await account.getSession('current');
-      if (session) {
+      
+      // Immediately create a JWT and store it
+      const jwtResponse = await account.createJWT();
+      const jwtToken = jwtResponse.jwt;
+      // Store token in AsyncStorage
+      await AsyncStorage.setItem('jwtToken', jwtToken);
+      // Set JWT on the client so subsequent requests are authenticated
+      client.setJWT(jwtToken);
+
+      // Verify user data to confirm authentication
+      const user = await account.get();
+      if (user) {
         router.replace('/(tabs)');
+      } else {
+        setError('Failed to retrieve user data.');
       }
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Login failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
       <Surface style={styles.surface}>
-        <Text variant="headlineMedium" style={styles.title}>Welcome Back!</Text>
-        <Text variant="bodyLarge" style={styles.subtitle}>Sign in to continue</Text>
-        
+        <Text variant="headlineMedium" style={styles.title}>
+          Welcome Back!
+        </Text>
+        <Text variant="bodyLarge" style={styles.subtitle}>
+          Sign in to continue
+        </Text>
         <TextInput
           label="Email"
           value={email}
@@ -44,7 +68,6 @@ export default function LoginScreen() {
           keyboardType="email-address"
           autoCapitalize="none"
         />
-        
         <TextInput
           label="Password"
           value={password}
@@ -53,22 +76,16 @@ export default function LoginScreen() {
           style={styles.input}
           secureTextEntry
         />
-
         {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        <Button
-          mode="contained"
-          onPress={handleLogin}
-          style={styles.button}
-          loading={loading}
-        >
+        <Button mode="contained" onPress={handleLogin} style={styles.button} loading={loading}>
           Sign In
         </Button>
-
         <View style={styles.footer}>
           <Text variant="bodyMedium">Don't have an account? </Text>
-          <Link href="/signup" asChild>
-            <Button mode="text" compact>Sign Up</Button>
+          <Link href="/(auth)/signup" asChild>
+            <Button mode="text" compact>
+              Sign Up
+            </Button>
           </Link>
         </View>
       </Surface>
@@ -116,4 +133,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 24,
   },
-}); 
+});
