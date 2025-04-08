@@ -1,13 +1,30 @@
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Clock, Calendar, Brain, BookOpen } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
+import { account } from '@/lib/appwrite';
 
 export default function HomeScreen() {
+  const [userName, setUserName] = useState('');
+
+  useEffect(() => {
+    fetchUserData();
+  }, []);
+
+  const fetchUserData = async () => {
+    try {
+      const user = await account.get();
+      setUserName(user.name);
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+    }
+  };
+
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <Text style={styles.greeting}>Good morning,</Text>
-        <Text style={styles.name}>Alex</Text>
+        <Text style={styles.name}>{userName}</Text>
       </View>
 
       <View style={styles.statsContainer}>
