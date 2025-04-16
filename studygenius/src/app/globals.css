@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-[var(--background)] text-[var(--foreground)] font-sans;
+  }
+}
+
+/* Global styles for our application */
+.card {
+  @apply rounded-xl border bg-white p-6 shadow-sm dark:bg-gray-950 dark:border-gray-800;
+}
+
+.heading-1 {
+  @apply text-3xl font-bold tracking-tight sm:text-4xl;
+}
+
+.heading-2 {
+  @apply text-2xl font-semibold tracking-tight;
+}
+
+.heading-3 {
+  @apply text-xl font-semibold tracking-tight;
+}
+
+.heading-4 {
+  @apply text-lg font-semibold tracking-tight;
+}
