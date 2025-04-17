@@ -1,4 +1,4 @@
-import { Client, Account, Databases } from 'appwrite';
+import { Client, Account, Databases, Query, ID } from 'appwrite';
 
 // Initialize Appwrite client
 const client = new Client();
@@ -10,6 +10,12 @@ client
 // Initialize Appwrite services
 export const account = new Account(client);
 export const databases = new Databases(client);
+
+// Database and Collection IDs
+export const DATABASE_ID = 'studygenius'; // Replace with your database ID
+export const COURSES_COLLECTION_ID = 'courses';
+export const FILES_COLLECTION_ID = 'files';
+export const STUDY_PLANS_COLLECTION_ID = 'study_plans';
 
 // Helper functions for authentication
 export const createUser = async (email, password, name) => {
@@ -135,5 +141,227 @@ export const getActiveSessions = async () => {
         }
         console.error('Error getting sessions:', error);
         return [];
+    }
+};
+
+// Course Management Functions
+export const createCourse = async (courseData) => {
+    try {
+        const userId = (await getCurrentUser()).$id;
+        
+        // Create course document
+        const course = await databases.createDocument(
+            DATABASE_ID,
+            COURSES_COLLECTION_ID,
+            ID.unique(),
+            {
+                ...courseData,
+                userId,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            }
+        );
+        
+        return course;
+    } catch (error) {
+        console.error('Error creating course:', error);
+        throw error;
+    }
+};
+
+export const updateCourse = async (courseId, courseData) => {
+    try {
+        const course = await databases.updateDocument(
+            DATABASE_ID,
+            COURSES_COLLECTION_ID,
+            courseId,
+            {
+                ...courseData,
+                updatedAt: new Date().toISOString(),
+            }
+        );
+        
+        return course;
+    } catch (error) {
+        console.error('Error updating course:', error);
+        throw error;
+    }
+};
+
+export const deleteCourse = async (courseId) => {
+    try {
+        await databases.deleteDocument(
+            DATABASE_ID,
+            COURSES_COLLECTION_ID,
+            courseId
+        );
+        
+        return { success: true };
+    } catch (error) {
+        console.error('Error deleting course:', error);
+        throw error;
+    }
+};
+
+export const getCourse = async (courseId) => {
+    try {
+        const course = await databases.getDocument(
+            DATABASE_ID,
+            COURSES_COLLECTION_ID,
+            courseId
+        );
+        
+        return course;
+    } catch (error) {
+        console.error('Error getting course:', error);
+        throw error;
+    }
+};
+
+export const getUserCourses = async () => {
+    try {
+        const userId = (await getCurrentUser()).$id;
+        
+        const courses = await databases.listDocuments(
+            DATABASE_ID,
+            COURSES_COLLECTION_ID,
+            [
+                Query.equal('userId', userId),
+                Query.orderDesc('updatedAt')
+            ]
+        );
+        
+        return courses.documents;
+    } catch (error) {
+        console.error('Error getting user courses:', error);
+        throw error;
+    }
+};
+
+// File Management Functions
+export const addFileRecord = async (fileData, courseId) => {
+    try {
+        const userId = (await getCurrentUser()).$id;
+        
+        const file = await databases.createDocument(
+            DATABASE_ID,
+            FILES_COLLECTION_ID,
+            ID.unique(),
+            {
+                ...fileData,
+                userId,
+                courseId,
+                createdAt: new Date().toISOString(),
+            }
+        );
+        
+        return file;
+    } catch (error) {
+        console.error('Error adding file record:', error);
+        throw error;
+    }
+};
+
+export const deleteFileRecord = async (fileId) => {
+    try {
+        await databases.deleteDocument(
+            DATABASE_ID,
+            FILES_COLLECTION_ID,
+            fileId
+        );
+        
+        return { success: true };
+    } catch (error) {
+        console.error('Error deleting file record:', error);
+        throw error;
+    }
+};
+
+export const getCourseFiles = async (courseId) => {
+    try {
+        const files = await databases.listDocuments(
+            DATABASE_ID,
+            FILES_COLLECTION_ID,
+            [
+                Query.equal('courseId', courseId),
+                Query.orderDesc('createdAt')
+            ]
+        );
+        
+        return files.documents;
+    } catch (error) {
+        console.error('Error getting course files:', error);
+        throw error;
+    }
+};
+
+// Study Plan Management Functions
+export const saveStudyPlan = async (studyPlanData, courseId) => {
+    try {
+        const userId = (await getCurrentUser()).$id;
+        
+        // Check if a study plan already exists for this course
+        const existingPlans = await databases.listDocuments(
+            DATABASE_ID,
+            STUDY_PLANS_COLLECTION_ID,
+            [
+                Query.equal('userId', userId),
+                Query.equal('courseId', courseId),
+            ]
+        );
+        
+        if (existingPlans.documents.length > 0) {
+            // Update existing study plan
+            const studyPlan = await databases.updateDocument(
+                DATABASE_ID,
+                STUDY_PLANS_COLLECTION_ID,
+                existingPlans.documents[0].$id,
+                {
+                    ...studyPlanData,
+                    updatedAt: new Date().toISOString(),
+                }
+            );
+            
+            return studyPlan;
+        } else {
+            // Create new study plan
+            const studyPlan = await databases.createDocument(
+                DATABASE_ID,
+                STUDY_PLANS_COLLECTION_ID,
+                ID.unique(),
+                {
+                    ...studyPlanData,
+                    userId,
+                    courseId,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                }
+            );
+            
+            return studyPlan;
+        }
+    } catch (error) {
+        console.error('Error saving study plan:', error);
+        throw error;
+    }
+};
+
+export const getStudyPlan = async (courseId) => {
+    try {
+        const userId = (await getCurrentUser()).$id;
+        
+        const studyPlans = await databases.listDocuments(
+            DATABASE_ID,
+            STUDY_PLANS_COLLECTION_ID,
+            [
+                Query.equal('userId', userId),
+                Query.equal('courseId', courseId),
+            ]
+        );
+        
+        return studyPlans.documents.length > 0 ? studyPlans.documents[0] : null;
+    } catch (error) {
+        console.error('Error getting study plan:', error);
+        throw error;
     }
 };
