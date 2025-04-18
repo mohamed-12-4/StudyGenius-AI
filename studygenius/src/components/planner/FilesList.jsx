@@ -5,7 +5,7 @@ import { FiFile, FiDownload, FiTrash2, FiEye } from 'react-icons/fi';
 import { toast } from 'sonner';
 import { deleteFile, getFileDownloadURL } from '@/lib/azure-storage';
 
-export default function FilesList({ files, courseId, onFileDeleted, onViewFile }) {
+export default function FilesList({ files, courseId, userId, onFileDeleted, onViewFile }) {
   const [deleting, setDeleting] = useState(null);
   const [downloading, setDownloading] = useState(null);
 
@@ -14,7 +14,7 @@ export default function FilesList({ files, courseId, onFileDeleted, onViewFile }
     
     try {
       setDeleting(fileId);
-      // Delete the file from Azure Storage
+      // Delete the file from Azure Storage using blobId
       await deleteFile(fileId);
       
       // Call the callback with the deleted file ID
@@ -33,8 +33,9 @@ export default function FilesList({ files, courseId, onFileDeleted, onViewFile }
 
   const handleDownload = async (file) => {
     try {
-      setDownloading(file.$id);
-      const downloadUrl = await getFileDownloadURL(file);
+      setDownloading(file.id);
+      // For Azure Storage, we use blobId to get the download URL
+      const downloadUrl = await getFileDownloadURL(file.blobId);
       
       // Create a link and trigger the download
       const link = document.createElement('a');
@@ -73,7 +74,7 @@ export default function FilesList({ files, courseId, onFileDeleted, onViewFile }
     <div className="overflow-hidden bg-white dark:bg-gray-800 shadow sm:rounded-md">
       <ul className="divide-y divide-gray-200 dark:divide-gray-700">
         {files.map((file) => (
-          <li key={file.$id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+          <li key={file.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
             <div className="px-4 py-4 sm:px-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center min-w-0 space-x-3">
@@ -85,7 +86,8 @@ export default function FilesList({ files, courseId, onFileDeleted, onViewFile }
                       {file.name}
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                      Uploaded: {new Date(file.$createdAt).toLocaleString()}
+                      {file.uploadedAt ? `Uploaded: ${new Date(file.uploadedAt).toLocaleString()}` : ''}
+                      {file.size ? ` • ${(file.size / 1024 / 1024).toFixed(2)} MB` : ''}
                     </p>
                   </div>
                 </div>
@@ -98,21 +100,21 @@ export default function FilesList({ files, courseId, onFileDeleted, onViewFile }
                   </button>
                   <button
                     onClick={() => handleDownload(file)}
-                    disabled={downloading === file.$id}
+                    disabled={downloading === file.id}
                     className="inline-flex items-center p-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
                   >
-                    {downloading === file.$id ? (
+                    {downloading === file.id ? (
                       <div className="h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin"></div>
                     ) : (
                       <FiDownload className="h-4 w-4" />
                     )}
                   </button>
                   <button
-                    onClick={() => handleDelete(file.$id)}
-                    disabled={deleting === file.$id}
+                    onClick={() => handleDelete(file.blobId)}
+                    disabled={deleting === file.blobId}
                     className="inline-flex items-center p-1.5 border border-red-300 dark:border-red-700 rounded-md text-xs font-medium text-red-700 dark:text-red-400 bg-white dark:bg-gray-800 hover:bg-red-50 dark:hover:bg-red-900/20"
                   >
-                    {deleting === file.$id ? (
+                    {deleting === file.blobId ? (
                       <div className="h-4 w-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin"></div>
                     ) : (
                       <FiTrash2 className="h-4 w-4" />

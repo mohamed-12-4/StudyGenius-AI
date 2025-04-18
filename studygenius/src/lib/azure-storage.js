@@ -13,6 +13,25 @@ const blobServiceClient = BlobServiceClient.fromConnectionString(
 // Get a reference to a container
 const containerClient = blobServiceClient.getContainerClient(containerName);
 
+// Create the container if it doesn't exist (this is async, but we'll handle it in each function)
+async function ensureContainerExists() {
+  try {
+    const exists = await containerClient.exists();
+    if (!exists) {
+      console.log(`Creating container "${containerName}"...`);
+      const createContainerResponse = await containerClient.create({
+        access: 'blob' // Allows public read access for blobs only (not containers)
+      });
+      console.log(`Container "${containerName}" has been created successfully`);
+      return true;
+    }
+    return true;
+  } catch (error) {
+    console.error(`Error creating container "${containerName}":`, error);
+    throw error;
+  }
+}
+
 /**
  * Upload a file to Azure Blob Storage
  * @param {File} file - The file to upload
@@ -22,6 +41,9 @@ const containerClient = blobServiceClient.getContainerClient(containerName);
  */
 export const uploadFile = async (file, userId, courseId) => {
   try {
+    // Ensure container exists before uploading
+    await ensureContainerExists();
+    
     // Create a unique name for the blob using userId, courseId and original filename
     const blobName = `${userId}/${courseId}/${Date.now()}-${file.name}`;
     
@@ -56,6 +78,9 @@ export const uploadFile = async (file, userId, courseId) => {
  */
 export const deleteFile = async (blobName) => {
   try {
+    // Ensure container exists before deleting
+    await ensureContainerExists();
+    
     const blockBlobClient = containerClient.getBlockBlobClient(blobName);
     await blockBlobClient.delete();
   } catch (error) {
@@ -72,6 +97,9 @@ export const deleteFile = async (blobName) => {
  */
 export const getFilesList = async (userId, courseId) => {
   try {
+    // Ensure container exists before listing files
+    await ensureContainerExists();
+    
     const prefix = `${userId}/${courseId}/`;
     
     // List blobs with the specific prefix
@@ -110,6 +138,9 @@ export const getFilesList = async (userId, courseId) => {
  */
 export const getFileContent = async (blobName) => {
   try {
+    // Ensure container exists before getting content
+    await ensureContainerExists();
+    
     const blockBlobClient = containerClient.getBlockBlobClient(blobName);
     
     // Download the blob's content
@@ -153,6 +184,9 @@ async function streamToText(readableStream) {
  */
 export const getFileDownloadURL = async (blobName) => {
   try {
+    // Ensure container exists before getting download URL
+    await ensureContainerExists();
+    
     const blockBlobClient = containerClient.getBlockBlobClient(blobName);
     
     // For simplicity, we'll just return the regular URL

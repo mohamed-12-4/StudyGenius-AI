@@ -5,7 +5,7 @@ import { FiUpload, FiFile, FiX } from 'react-icons/fi';
 import { toast } from 'sonner';
 import { uploadFile } from '@/lib/azure-storage';
 
-export default function FileUploader({ courseId, onFileUploaded }) {
+export default function FileUploader({ courseId, userId, onFileUploaded }) {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -55,12 +55,15 @@ export default function FileUploader({ courseId, onFileUploaded }) {
   };
 
   const handleUpload = async () => {
-    if (!selectedFile || !courseId) return;
+    if (!selectedFile || !courseId || !userId) {
+      toast.error('Missing required information for upload.');
+      return;
+    }
     
     try {
       setIsUploading(true);
-      // Upload the file to Azure Storage
-      const uploaded = await uploadFile(selectedFile, courseId);
+      // Upload the file to Azure Storage - passing userId as required
+      const uploaded = await uploadFile(selectedFile, userId, courseId);
       
       // Call the callback with the uploaded file info
       if (onFileUploaded) {

@@ -6,16 +6,13 @@ import { toast } from 'sonner';
 import { 
   getUserCourses, 
   getCourse, 
-  getCourseFiles, 
   createCourse, 
   getStudyPlan, 
   saveStudyPlan,
-  addFileRecord,
-  deleteFileRecord,
   updateCourse,
   deleteCourse
 } from '@/lib/azure-cosmos';
-import { uploadFile, deleteFile } from '@/lib/azure-storage';
+import { uploadFile, deleteFile, getFilesList } from '@/lib/azure-storage';
 import { generateStudyPlan } from '@/lib/azure-openai';
 import CourseForm from '@/components/planner/CourseForm';
 import FileUploader from '@/components/planner/FileUploader';
@@ -57,15 +54,16 @@ export default function StudyPlanner() {
 
   // Load course files when a course is selected
   useEffect(() => {
-    async function loadCourseFiles() {
+    async function loadFiles() {
       if (!selectedCourse || !user) return;
 
       try {
         setIsLoading(true);
-        const files = await getCourseFiles(selectedCourse.id || selectedCourse.$id, user.id || user.$id);
+        // Get files from Azure Storage directly instead of Cosmos DB
+        const files = await getFilesList(user.id || user.$id, selectedCourse.id || selectedCourse.$id);
         setCourseFiles(files);
 
-        // Load existing study plan if available
+        // Load existing study plan from Cosmos DB
         const existingPlan = await getStudyPlan(selectedCourse.id || selectedCourse.$id, user.id || user.$id);
         setStudyPlan(existingPlan);
       } catch (error) {
@@ -76,7 +74,7 @@ export default function StudyPlanner() {
       }
     }
 
-    loadCourseFiles();
+    loadFiles();
   }, [selectedCourse, user]);
 
   const handleCourseSelect = async (courseId) => {
@@ -107,7 +105,7 @@ export default function StudyPlanner() {
     }
   };
 
-  const handleFileUpload = async (file) => {
+  const handleFileUpload = async (uploadedFile) => {
     if (!selectedCourse) {
       toast.error('Please select a course first.');
       return;
@@ -115,18 +113,13 @@ export default function StudyPlanner() {
 
     try {
       setIsLoading(true);
-      // Upload file to Azure Storage
-      const uploadedFile = await uploadFile(file, selectedCourse.userId, selectedCourse.id || selectedCourse.$id);
-      
-      // Add file record to Appwrite database
-      const fileRecord = await addFileRecord(uploadedFile, selectedCourse.id || selectedCourse.$id);
-      
-      // Update local state
-      setCourseFiles(prev => [fileRecord, ...prev]);
+      // Note: The file is already uploaded to Azure Storage from the FileUploader component
+      // Just update the local state with the new file
+      setCourseFiles(prev => [uploadedFile, ...prev]);
       toast.success('File uploaded successfully!');
     } catch (error) {
-      console.error('Error uploading file:', error);
-      toast.error('Failed to upload file. Please try again.');
+      console.error('Error processing uploaded file:', error);
+      toast.error('Failed to process file. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -135,14 +128,11 @@ export default function StudyPlanner() {
   const handleFileDelete = async (fileId, blobId) => {
     try {
       setIsLoading(true);
-      // Delete file from Azure Storage
-      await deleteFile(blobId);
-      
-      // Delete file record from Appwrite database
-      await deleteFileRecord(fileId);
+      // Delete file from Azure Storage using the blobId
+      await deleteFile(blobId || fileId);
       
       // Update local state
-      setCourseFiles(prev => prev.filter(file => file.id !== fileId));
+      setCourseFiles(prev => prev.filter(file => file.id !== fileId && file.blobId !== blobId));
       toast.success('File deleted successfully!');
     } catch (error) {
       console.error('Error deleting file:', error);
@@ -153,9 +143,10 @@ export default function StudyPlanner() {
   };
 
   const handleFilesChanged = async () => {
-    if (selectedCourse) {
+    if (selectedCourse && user) {
       try {
-        const files = await getCourseFiles(selectedCourse.id || selectedCourse.$id);
+        // Refresh files from Azure Storage
+        const files = await getFilesList(user.id || user.$id, selectedCourse.id || selectedCourse.$id);
         setCourseFiles(files);
       } catch (error) {
         console.error('Error refreshing files:', error);
@@ -176,7 +167,7 @@ export default function StudyPlanner() {
       const generatedPlan = await generateStudyPlan(selectedCourse, courseFiles);
       
       // Save the study plan to the database
-      const savedPlan = await saveStudyPlan(generatedPlan, selectedCourse.id || selectedCourse.$id);
+      const savedPlan = await saveStudyPlan(generatedPlan, selectedCourse.id || selectedCourse.$id, user.id || user.$id);
       
       // Update local state
       setStudyPlan(savedPlan);
@@ -292,11 +283,17 @@ export default function StudyPlanner() {
                   <p className="text-gray-600 dark:text-gray-300">{selectedCourse.description}</p>
                 </div>
                 
-                <FileUploader onFileUpload={handleFileUpload} />
+                <FileUploader 
+                  courseId={selectedCourse.id || selectedCourse.$id} 
+                  userId={user.id || user.$id}
+                  onFileUploaded={handleFileUpload}
+                />
                 
                 <FilesList 
                   files={courseFiles}
                   courseId={selectedCourse.id || selectedCourse.$id}
+                  userId={user.id || user.$id}
+                  onFileDeleted={handleFileDelete}
                   onFilesChanged={handleFilesChanged}
                 />
               </div>
