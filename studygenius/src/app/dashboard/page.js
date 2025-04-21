@@ -1,75 +1,100 @@
-import { FiCalendar, FiBook, FiClock, FiTrendingUp, FiAward, FiUsers } from "react-icons/fi";
+'use client';
 
-// Sample data for dashboard stats
-const stats = [
-  { name: "Study Streak", value: "7 days", icon: FiTrendingUp, color: "text-primary-500" },
-  { name: "Focus Time", value: "12.5 hrs", icon: FiClock, color: "text-secondary-500" },
-  { name: "Courses", value: "4 active", icon: FiBook, color: "text-success-500" },
-  { name: "Points", value: "2,450", icon: FiAward, color: "text-warning-500" },
-];
-
-// Sample data for upcoming tasks
-const upcomingTasks = [
-  { 
-    id: 1, 
-    title: "Physics Exam Review", 
-    course: "Physics 101", 
-    dueDate: "Today", 
-    priority: "high",
-    completion: 75
-  },
-  { 
-    id: 2, 
-    title: "Literature Essay Draft", 
-    course: "World Literature", 
-    dueDate: "Tomorrow", 
-    priority: "medium",
-    completion: 40
-  },
-  { 
-    id: 3, 
-    title: "Linear Algebra Problem Set", 
-    course: "Mathematics", 
-    dueDate: "April 18", 
-    priority: "medium",
-    completion: 10
-  },
-  { 
-    id: 4, 
-    title: "Python Programming Project", 
-    course: "Intro to CS", 
-    dueDate: "April 20", 
-    priority: "low",
-    completion: 0
-  },
-];
-
-// Sample data for recommended resources
-const recommendedResources = [
-  {
-    id: 1,
-    title: "Understanding Quantum Physics Concepts",
-    type: "Video",
-    duration: "18 min",
-    course: "Physics 101"
-  },
-  {
-    id: 2,
-    title: "Literary Analysis Techniques",
-    type: "Article",
-    duration: "10 min read",
-    course: "World Literature"
-  },
-  {
-    id: 3,
-    title: "Matrix Operations Practice Quiz",
-    type: "Quiz",
-    duration: "15 questions",
-    course: "Mathematics"
-  }
-];
+import { useEffect, useState } from 'react';
+import { FiCalendar, FiBook, FiClock, FiTrendingUp, FiAward, FiUsers, FiArrowRight } from "react-icons/fi";
+import { toast } from 'sonner';
+import { getDashboardData } from '@/lib/dashboard-service';
+import { useAuth } from '@/context/AuthContext';
+import Link from 'next/link';
 
 export default function Dashboard() {
+  const { user } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
+  const [dashboardData, setDashboardData] = useState({
+    stats: {
+      streak: "0 days",
+      focusTime: "0 hrs",
+      coursesCompleted: 0,
+      points: "0"
+    },
+    upcomingTasks: [],
+    courseProgress: [],
+    recommendedResources: [],
+    weeklyProgress: {
+      current: 0,
+      target: 20
+    }
+  });
+
+  // Get current date
+  const today = new Date();
+  const formattedDate = today.toLocaleDateString('en-US', { 
+    month: 'long', 
+    day: 'numeric', 
+    year: 'numeric'
+  });
+
+  useEffect(() => {
+    const loadDashboardData = async () => {
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
+      
+      try {
+        setIsLoading(true);
+        // Use the user ID from auth context
+        const userId = user.id || user.$id;
+        const data = await getDashboardData(userId);
+        setDashboardData(data);
+      } catch (error) {
+        console.error('Error loading dashboard data:', error);
+        toast.error('Failed to load dashboard data. Please refresh the page.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadDashboardData();
+  }, [user]);
+
+  // Stats cards configuration
+  const stats = [
+    { 
+      name: "Study Streak", 
+      value: dashboardData.stats.streak, 
+      icon: FiTrendingUp, 
+      color: "text-primary-500" 
+    },
+    { 
+      name: "Focus Time", 
+      value: dashboardData.stats.focusTime, 
+      icon: FiClock, 
+      color: "text-secondary-500" 
+    },
+    { 
+      name: "Courses", 
+      value: `${dashboardData.courseProgress.length} active`, 
+      icon: FiBook, 
+      color: "text-success-500" 
+    },
+    { 
+      name: "Points", 
+      value: dashboardData.stats.points, 
+      icon: FiAward, 
+      color: "text-warning-500" 
+    },
+  ];
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-96">
+        <div className="w-12 h-12 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-gray-600 dark:text-gray-300">Loading your dashboard...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {/* Page header */}
@@ -77,7 +102,7 @@ export default function Dashboard() {
         <h1 className="heading-1 text-gray-900 dark:text-white">Dashboard</h1>
         <div className="flex items-center gap-2">
           <span className="text-gray-500 dark:text-gray-400">Today is</span>
-          <span className="font-medium text-gray-900 dark:text-white">April 16, 2025</span>
+          <span className="font-medium text-gray-900 dark:text-white">{formattedDate}</span>
         </div>
       </div>
 
@@ -102,43 +127,59 @@ export default function Dashboard() {
         <div className="lg:col-span-2 card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="heading-3 text-gray-900 dark:text-white">Upcoming Study Tasks</h2>
-            <button className="text-sm text-primary-600 hover:text-primary-500">
-              View all tasks
-            </button>
+            <Link href="/dashboard/planner" className="text-sm text-primary-600 hover:text-primary-500 flex items-center">
+              View all tasks <FiArrowRight className="ml-1" />
+            </Link>
           </div>
 
           <div className="overflow-hidden">
-            <ul className="divide-y divide-gray-200 dark:divide-gray-800">
-              {upcomingTasks.map((task) => (
-                <li key={task.id} className="py-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center">
-                      <span className={`w-2 h-2 rounded-full mr-2 ${
-                        task.priority === 'high' ? 'bg-danger-500' : 
-                        task.priority === 'medium' ? 'bg-warning-500' : 'bg-success-500'
-                      }`}></span>
-                      <h3 className="font-medium text-gray-900 dark:text-white">{task.title}</h3>
-                    </div>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">{task.dueDate}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-500 dark:text-gray-400">{task.course}</span>
-                    <div className="flex items-center">
-                      <div className="w-32 bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 mr-2">
-                        <div 
-                          className={`h-2.5 rounded-full ${
-                            task.completion >= 75 ? 'bg-success-500' : 
-                            task.completion >= 25 ? 'bg-warning-500' : 'bg-primary-500'
-                          }`}
-                          style={{ width: `${task.completion}%` }}
-                        ></div>
+            {dashboardData.upcomingTasks.length > 0 ? (
+              <ul className="divide-y divide-gray-200 dark:divide-gray-800">
+                {dashboardData.upcomingTasks.map((task) => (
+                  <li key={task.id} className="py-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center">
+                        <span className={`w-2 h-2 rounded-full mr-2 ${
+                          task.priority === 'high' ? 'bg-danger-500' : 
+                          task.priority === 'medium' ? 'bg-warning-500' : 'bg-success-500'
+                        }`}></span>
+                        <h3 className="font-medium text-gray-900 dark:text-white">{task.title}</h3>
                       </div>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">{task.completion}%</span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">{task.dueDate}</span>
                     </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">{task.course}</span>
+                      <div className="flex items-center">
+                        <div className="w-32 bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 mr-2">
+                          <div 
+                            className={`h-2.5 rounded-full ${
+                              task.completion >= 75 ? 'bg-success-500' : 
+                              task.completion >= 25 ? 'bg-warning-500' : 'bg-primary-500'
+                            }`}
+                            style={{ width: `${task.completion}%` }}
+                          ></div>
+                        </div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">{task.completion}%</span>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <FiCalendar className="w-10 h-10 text-gray-400 dark:text-gray-600 mb-2" />
+                <h3 className="text-lg font-medium text-gray-800 dark:text-gray-200 mb-1">No upcoming tasks</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                  Add a course and generate a study plan to see your tasks here.
+                </p>
+                <Link 
+                  href="/dashboard/planner" 
+                  className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+                >
+                  Add a course
+                </Link>
+              </div>
+            )}
           </div>
         </div>
 
@@ -146,9 +187,9 @@ export default function Dashboard() {
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="heading-3 text-gray-900 dark:text-white">Weekly Overview</h2>
-            <button className="text-sm text-primary-600 hover:text-primary-500">
+            <Link href="/dashboard/planner" className="text-sm text-primary-600 hover:text-primary-500">
               <FiCalendar className="inline mr-1" /> Full Schedule
-            </button>
+            </Link>
           </div>
           
           <div className="space-y-3">
@@ -156,10 +197,15 @@ export default function Dashboard() {
             <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-sm text-gray-500 dark:text-gray-400">Hours Studied</span>
-                <span className="text-sm font-medium text-gray-900 dark:text-white">12.5 / 20 hrs</span>
+                <span className="text-sm font-medium text-gray-900 dark:text-white">
+                  {dashboardData.weeklyProgress.current} / {dashboardData.weeklyProgress.target} hrs
+                </span>
               </div>
               <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
-                <div className="bg-primary-500 h-2.5 rounded-full" style={{ width: '62.5%' }}></div>
+                <div 
+                  className="bg-primary-500 h-2.5 rounded-full" 
+                  style={{ width: `${(dashboardData.weeklyProgress.current / dashboardData.weeklyProgress.target) * 100}%` }}
+                ></div>
               </div>
             </div>
             
@@ -167,35 +213,39 @@ export default function Dashboard() {
             <div className="space-y-3">
               <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Course Progress</h3>
               
-              <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm font-medium text-gray-900 dark:text-white">Physics 101</span>
-                  <span className="text-xs text-gray-500 dark:text-gray-400">68%</span>
+              {dashboardData.courseProgress.length > 0 ? (
+                dashboardData.courseProgress.slice(0, 3).map((course) => (
+                  <div key={course.id} className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-sm font-medium text-gray-900 dark:text-white truncate max-w-[70%]">{course.name}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">{course.progress}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full ${
+                          course.progress >= 75 ? 'bg-success-500' : 
+                          course.progress >= 25 ? 'bg-primary-500' : 'bg-secondary-500'
+                        }`} 
+                        style={{ width: `${course.progress}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg text-center">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    No active courses yet
+                  </p>
                 </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                  <div className="bg-primary-500 h-2 rounded-full" style={{ width: '68%' }}></div>
-                </div>
-              </div>
+              )}
               
-              <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm font-medium text-gray-900 dark:text-white">World Literature</span>
-                  <span className="text-xs text-gray-500 dark:text-gray-400">42%</span>
+              {dashboardData.courseProgress.length > 3 && (
+                <div className="text-center">
+                  <Link href="/dashboard/planner" className="text-sm text-primary-600 hover:underline">
+                    +{dashboardData.courseProgress.length - 3} more courses
+                  </Link>
                 </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                  <div className="bg-secondary-500 h-2 rounded-full" style={{ width: '42%' }}></div>
-                </div>
-              </div>
-              
-              <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm font-medium text-gray-900 dark:text-white">Mathematics</span>
-                  <span className="text-xs text-gray-500 dark:text-gray-400">85%</span>
-                </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                  <div className="bg-success-500 h-2 rounded-full" style={{ width: '85%' }}></div>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -208,26 +258,49 @@ export default function Dashboard() {
             <FiAward className="inline-block mr-2 text-secondary-500" />
             AI-Recommended Resources
           </h2>
-          <button className="text-sm text-primary-600 hover:text-primary-500">
-            View all recommendations
-          </button>
+          <Link href="/dashboard/planner" className="text-sm text-primary-600 hover:text-primary-500">
+            View all resources
+          </Link>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {recommendedResources.map((resource) => (
-            <div key={resource.id} className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg hover:shadow-md transition-shadow">
-              <div className="flex justify-between mb-2">
-                <span className="text-xs font-medium py-1 px-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
-                  {resource.type}
-                </span>
-                <span className="text-xs text-gray-500 dark:text-gray-400">{resource.duration}</span>
+        {dashboardData.recommendedResources.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {dashboardData.recommendedResources.map((resource) => (
+              <div key={resource.id} className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg hover:shadow-md transition-shadow">
+                <div className="flex justify-between mb-2">
+                  <span className="text-xs font-medium py-1 px-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                    {resource.type}
+                  </span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">{resource.duration}</span>
+                </div>
+                <h3 className="font-medium text-gray-900 dark:text-white mb-1 line-clamp-2">{resource.title}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{resource.course}</p>
+                <a 
+                  href={resource.url} 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  className="mt-3 text-sm text-primary-600 hover:text-primary-500 inline-block"
+                >
+                  View Resource
+                </a>
               </div>
-              <h3 className="font-medium text-gray-900 dark:text-white mb-1">{resource.title}</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">{resource.course}</p>
-              <button className="mt-3 text-sm text-primary-600 hover:text-primary-500">View Resource</button>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <FiBook className="w-10 h-10 text-gray-400 dark:text-gray-600 mb-2" />
+            <h3 className="text-lg font-medium text-gray-800 dark:text-gray-200 mb-1">No resources yet</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Add courses and generate study plans to get AI-recommended resources.
+            </p>
+            <Link 
+              href="/dashboard/planner" 
+              className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+            >
+              Add a course
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* Community activity */}
@@ -237,9 +310,9 @@ export default function Dashboard() {
             <FiUsers className="inline-block mr-2 text-primary-500" />
             Community Activity
           </h2>
-          <button className="text-sm text-primary-600 hover:text-primary-500">
+          <Link href="/dashboard/community" className="text-sm text-primary-600 hover:text-primary-500">
             Join a study group
-          </button>
+          </Link>
         </div>
 
         <div className="space-y-4">

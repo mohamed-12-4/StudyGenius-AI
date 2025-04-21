@@ -1,14 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FiCalendar, FiClock, FiList, FiBookOpen, FiTarget, FiBook, FiRefreshCw, FiDownload } from 'react-icons/fi';
+import { FiCalendar, FiClock, FiList, FiBookOpen, FiTarget, FiBook, FiRefreshCw, FiDownload, FiFile } from 'react-icons/fi';
 import { toast } from 'sonner';
 import { generateStudyPlan } from '@/lib/azure-openai';
-import { saveStudyPlan } from '@/lib/appwrite';
+import { saveStudyPlan } from '@/lib/azure-cosmos'; // Changed from appwrite to azure-cosmos
+import { useAuth } from '@/context/AuthContext';
 
 export default function StudyPlanViewer({ course, files, existingPlan, isGenerating, setIsGenerating }) {
   const [studyPlan, setStudyPlan] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const { user } = useAuth(); // Get user from auth context
+
 
   useEffect(() => {
     // Set the study plan when component mounts or when existingPlan changes
@@ -37,11 +40,18 @@ export default function StudyPlanViewer({ course, files, existingPlan, isGenerat
 
     try {
       setIsGenerating(true);
-      // Generate the study plan
+      // Generate the study plan using Azure OpenAI
       const generatedPlan = await generateStudyPlan(course, files);
       
-      // Save the study plan to the database
-      const savedPlan = await saveStudyPlan(generatedPlan, course.$id);
+      if (!user) {
+        toast.error('User authentication required to save study plan');
+        return;
+      }
+      
+      // Save the study plan to Azure Cosmos DB with proper parameters
+      const userId = user.id || user.$id;
+      const courseId = course.id || course.$id;
+      const savedPlan = await saveStudyPlan(generatedPlan, courseId, userId);
       
       // Update local state with the plan data
       const planData = typeof savedPlan.plan === 'string' 

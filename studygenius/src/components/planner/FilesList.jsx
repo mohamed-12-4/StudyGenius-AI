@@ -5,21 +5,28 @@ import { FiFile, FiDownload, FiTrash2, FiEye } from 'react-icons/fi';
 import { toast } from 'sonner';
 import { deleteFile, getFileDownloadURL } from '@/lib/azure-storage';
 
-export default function FilesList({ files, courseId, userId, onFileDeleted, onViewFile }) {
+export default function FilesList({ files, courseId, userId, onFileDeleted, onFilesChanged, onViewFile }) {
   const [deleting, setDeleting] = useState(null);
   const [downloading, setDownloading] = useState(null);
 
-  const handleDelete = async (fileId) => {
+  const handleDelete = async (file) => {
     if (!confirm('Are you sure you want to delete this file?')) return;
     
     try {
+      const fileId = file.id || file.blobId;
       setDeleting(fileId);
-      // Delete the file from Azure Storage using blobId
-      await deleteFile(fileId);
       
-      // Call the callback with the deleted file ID
+      // Delete the file from Azure Storage using blobId
+      await deleteFile(file.blobId || fileId);
+      
+      // Call the callback with the deleted file
       if (onFileDeleted) {
-        onFileDeleted(fileId);
+        onFileDeleted(fileId, file.blobId);
+      }
+      
+      // Refresh file list after deletion
+      if (onFilesChanged) {
+        onFilesChanged();
       }
       
       toast.success('File deleted successfully');
@@ -33,9 +40,11 @@ export default function FilesList({ files, courseId, userId, onFileDeleted, onVi
 
   const handleDownload = async (file) => {
     try {
-      setDownloading(file.id);
+      const fileId = file.id || file.blobId;
+      setDownloading(fileId);
+      
       // For Azure Storage, we use blobId to get the download URL
-      const downloadUrl = await getFileDownloadURL(file.blobId);
+      const downloadUrl = await getFileDownloadURL(file.blobId || fileId);
       
       // Create a link and trigger the download
       const link = document.createElement('a');
@@ -44,6 +53,8 @@ export default function FilesList({ files, courseId, userId, onFileDeleted, onVi
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      
+      toast.success('File download started');
     } catch (error) {
       console.error('Error downloading file:', error);
       toast.error('Failed to download file. Please try again.');
@@ -74,7 +85,7 @@ export default function FilesList({ files, courseId, userId, onFileDeleted, onVi
     <div className="overflow-hidden bg-white dark:bg-gray-800 shadow sm:rounded-md">
       <ul className="divide-y divide-gray-200 dark:divide-gray-700">
         {files.map((file) => (
-          <li key={file.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+          <li key={file.id || file.blobId} className="hover:bg-gray-50 dark:hover:bg-gray-700">
             <div className="px-4 py-4 sm:px-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center min-w-0 space-x-3">
@@ -100,21 +111,21 @@ export default function FilesList({ files, courseId, userId, onFileDeleted, onVi
                   </button>
                   <button
                     onClick={() => handleDownload(file)}
-                    disabled={downloading === file.id}
+                    disabled={downloading === (file.id || file.blobId)}
                     className="inline-flex items-center p-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
                   >
-                    {downloading === file.id ? (
+                    {downloading === (file.id || file.blobId) ? (
                       <div className="h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin"></div>
                     ) : (
                       <FiDownload className="h-4 w-4" />
                     )}
                   </button>
                   <button
-                    onClick={() => handleDelete(file.blobId)}
-                    disabled={deleting === file.blobId}
+                    onClick={() => handleDelete(file)}
+                    disabled={deleting === (file.id || file.blobId)}
                     className="inline-flex items-center p-1.5 border border-red-300 dark:border-red-700 rounded-md text-xs font-medium text-red-700 dark:text-red-400 bg-white dark:bg-gray-800 hover:bg-red-50 dark:hover:bg-red-900/20"
                   >
-                    {deleting === file.blobId ? (
+                    {deleting === (file.id || file.blobId) ? (
                       <div className="h-4 w-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin"></div>
                     ) : (
                       <FiTrash2 className="h-4 w-4" />

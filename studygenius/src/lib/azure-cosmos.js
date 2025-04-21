@@ -185,12 +185,12 @@ export const deleteCourse = async (courseId, userId) => {
 
 /**
  * Save a study plan for a course
- * @param {string} courseId - The course ID
  * @param {Object} studyPlan - The study plan data
+ * @param {string} courseId - The course ID
  * @param {string} userId - The user ID who owns the course
  * @returns {Promise<Object>} The updated course with study plan
  */
-export const saveStudyPlan = async (courseId, studyPlan, userId) => {
+export const saveStudyPlan = async (studyPlan, courseId, userId) => {
   try {
     // Ensure database and container exist
     await ensureDbSetup();
@@ -199,8 +199,11 @@ export const saveStudyPlan = async (courseId, studyPlan, userId) => {
     const existingCourse = await getCourse(courseId, userId);
     
     if (!existingCourse) {
+      console.error(`Course not found for ID: ${courseId}, userID: ${userId}`);
       throw new Error("Course not found or access denied");
     }
+    
+    console.log(`Found course ${existingCourse.name} (${existingCourse.id}), updating with study plan`);
     
     const updatedCourse = {
       ...existingCourse,
@@ -209,7 +212,7 @@ export const saveStudyPlan = async (courseId, studyPlan, userId) => {
     };
     
     const { resource } = await coursesContainer.item(courseId, courseId).replace(updatedCourse);
-    return resource;
+    return resource.studyPlan;
   } catch (error) {
     console.error("Error saving study plan in Cosmos DB:", error);
     throw error;

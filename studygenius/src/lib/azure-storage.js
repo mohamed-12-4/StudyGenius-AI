@@ -1,8 +1,16 @@
 'use server';
-import { BlobServiceClient } from "@azure/storage-blob";
+import { BlobServiceClient, StorageSharedKeyCredential, generateBlobSASQueryParameters, BlobSASPermissions } from "@azure/storage-blob";
 
 // Azure Storage configuration
 const containerName = "study-materials";
+const storageAccount = process.env.AZURE_STORAGE_ACCOUNT_NAME;
+const storageAccountKey = process.env.AZURE_STORAGE_ACCOUNT_KEY;
+
+// Initialize SharedKeyCredential for SAS token generation
+const sharedKeyCredential = new StorageSharedKeyCredential(
+  storageAccount,
+  storageAccountKey
+);
 
 // Initialize BlobServiceClient using a connection string
 // Ensure NEXT_PUBLIC_AZURE_STORAGE_CONNECTION_STRING is set in environment
@@ -12,6 +20,53 @@ const blobServiceClient = BlobServiceClient.fromConnectionString(
 
 // Get a reference to a container
 const containerClient = blobServiceClient.getContainerClient(containerName);
+
+/**
+ * Generate a Shared Access Signature (SAS) token for a blob
+ * @param {string} blobName - The name of the blob
+ * @param {number} expiryMinutes - Token expiry time in minutes (default: 60)
+ * @returns {string} SAS token URL
+ */
+function generateSasToken(blobName, expiryMinutes = 60) {
+  // Set start time to 5 minutes ago to avoid clock skew issues
+  const startsOn = new Date();
+  startsOn.setMinutes(startsOn.getMinutes() - 5);
+  
+  // Set expiry time
+  const expiresOn = new Date();
+  expiresOn.setMinutes(expiresOn.getMinutes() + expiryMinutes);
+  
+  // Set permissions - read, write, delete, etc.
+  const permissions = new BlobSASPermissions();
+  permissions.read = true;  // Allow read access
+  
+  // Generate SAS token
+  const sasOptions = {
+    containerName,
+    blobName,
+    permissions,
+    startsOn,
+    expiresOn,
+  };
+  
+  // Generate the SAS query parameters
+  const sasToken = generateBlobSASQueryParameters(
+    sasOptions,
+    sharedKeyCredential
+  ).toString();
+  
+  // Construct the full URL with SAS token
+  return `${getBlobBaseUrl(blobName)}?${sasToken}`;
+}
+
+/**
+ * Get the base URL for a blob (without SAS token)
+ * @param {string} blobName - The name of the blob
+ * @returns {string} The base URL
+ */
+function getBlobBaseUrl(blobName) {
+  return `https://${storageAccount}.blob.core.windows.net/${containerName}/${blobName}`;
+}
 
 // Create the container if it doesn't exist (this is async, but we'll handle it in each function)
 async function ensureContainerExists() {
@@ -55,9 +110,13 @@ export const uploadFile = async (file, userId, courseId) => {
       blobHTTPHeaders: { blobContentType: file.type }
     });
     
-    // Return the file details
+    // Generate a SAS URL for the uploaded blob
+    const sasUrl = generateSasToken(blobName, 60); // 60 minutes expiry
+    
+    // Return the file details with SAS URL
     return {
-      url: blockBlobClient.url,
+      url: sasUrl,
+      sasUrl: sasUrl,
       name: file.name,
       id: blobName,
       blobId: blobName,
@@ -107,14 +166,15 @@ export const getFilesList = async (userId, courseId) => {
     
     const filesList = [];
     for await (const blob of iterator) {
-      // Create a block blob client
-      const blockBlobClient = containerClient.getBlockBlobClient(blob.name);
-      
       // Get the original filename (remove the userId/courseId/timestamp prefix)
       const originalFilename = blob.name.split('/').pop().substring(blob.name.split('/').pop().indexOf('-') + 1);
       
+      // Generate a SAS URL for each blob with 60 minutes expiry
+      const sasUrl = generateSasToken(blob.name, 60);
+      
       filesList.push({
-        url: blockBlobClient.url,
+        url: sasUrl,
+        sasUrl: sasUrl,
         name: originalFilename,
         id: blob.name,
         blobId: blob.name,
@@ -178,20 +238,20 @@ async function streamToText(readableStream) {
 }
 
 /**
- * Get a downloadable URL for a file
+ * Get a downloadable URL for a file with SAS token
  * @param {string} blobName - The name of the blob
- * @returns {Promise<string>} The download URL
+ * @param {number} expiryMinutes - Token expiry time in minutes (default: 60)
+ * @returns {Promise<string>} The download URL with SAS token
  */
-export const getFileDownloadURL = async (blobName) => {
+export const getFileDownloadURL = async (blobName, expiryMinutes = 60) => {
   try {
     // Ensure container exists before getting download URL
     await ensureContainerExists();
     
-    const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+    // Generate a SAS token for the blob with specified expiry
+    const sasUrl = generateSasToken(blobName, expiryMinutes);
     
-    // For simplicity, we'll just return the regular URL
-    // In a production app, you might want to generate a SAS token with an expiry time
-    return blockBlobClient.url;
+    return sasUrl;
   } catch (error) {
     console.error("Error getting file download URL from Azure Storage:", error);
     throw error;

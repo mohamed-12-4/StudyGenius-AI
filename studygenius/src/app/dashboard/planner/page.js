@@ -30,6 +30,7 @@ export default function StudyPlanner() {
   const [isLoading, setIsLoading] = useState(true);
   const [studyPlan, setStudyPlan] = useState(null);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+  const [detectedSyllabus, setDetectedSyllabus] = useState(null);
   const { user } = useAuth();
 
   // Load user's courses on component mount
@@ -131,8 +132,10 @@ export default function StudyPlanner() {
       // Delete file from Azure Storage using the blobId
       await deleteFile(blobId || fileId);
       
-      // Update local state
-      setCourseFiles(prev => prev.filter(file => file.id !== fileId && file.blobId !== blobId));
+      // Update local state - check for both properties to ensure we catch the file
+      setCourseFiles(prev => prev.filter(file => 
+        (file.id !== fileId) && (file.blobId !== blobId)
+      ));
       toast.success('File deleted successfully!');
     } catch (error) {
       console.error('Error deleting file:', error);
@@ -151,6 +154,38 @@ export default function StudyPlanner() {
       } catch (error) {
         console.error('Error refreshing files:', error);
       }
+    }
+  };
+
+  // Handle when a syllabus is detected during file upload
+  const handleSyllabusDetected = (syllabusFile) => {
+    setDetectedSyllabus(syllabusFile);
+    toast.info(
+      'Syllabus detected! You can generate a study plan directly from this syllabus.',
+      { duration: 5000 }
+    );
+  };
+
+  // Handle quick plan generation from syllabus
+  const handleQuickPlanGenerated = async (plan) => {
+    try {
+      if (!user) {
+        toast.error('User authentication required to save study plan');
+        return;
+      }
+      
+      // Save the plan to Azure Cosmos DB
+      const savedPlan = await saveStudyPlan(plan, selectedCourse.id || selectedCourse.$id, user.id || user.$id);
+      
+      // Update local state
+      setStudyPlan(savedPlan);
+      
+      // Switch to plan tab
+      setActiveTab('plan');
+      toast.success('Study plan created from syllabus successfully!');
+    } catch (error) {
+      console.error('Error saving quick study plan:', error);
+      toast.error('Failed to save the study plan. Please try again.');
     }
   };
 
@@ -287,6 +322,9 @@ export default function StudyPlanner() {
                   courseId={selectedCourse.id || selectedCourse.$id} 
                   userId={user.id || user.$id}
                   onFileUploaded={handleFileUpload}
+                  onSyllabusDetected={handleSyllabusDetected}
+                  onQuickPlanGenerated={handleQuickPlanGenerated}
+                  course={selectedCourse}
                 />
                 
                 <FilesList 
