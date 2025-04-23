@@ -15,6 +15,10 @@ const client = new CosmosClient({ endpoint, key });
 let database;
 let coursesContainer;
 
+// Initialize database and container references for roadmaps
+const roadmapsContainerId = "roadmaps";
+let roadmapsContainer;
+
 /**
  * Ensures that the database and container exist before any operations
  * @returns {Promise<void>}
@@ -27,16 +31,23 @@ const ensureDbSetup = async () => {
     });
     database = dbResponse;
 
-    // Create container if it doesn't exist
-    const { container } = await database.containers.createIfNotExists({
+    // Create courses container if it doesn't exist
+    const { container: coursesResponse } = await database.containers.createIfNotExists({
       id: coursesContainerId,
       partitionKey: { paths: ["/id"] }
     });
-    coursesContainer = container;
+    coursesContainer = coursesResponse;
     
-    console.log("Database and container setup completed");
+    // Create roadmaps container if it doesn't exist
+    const { container: roadmapsResponse } = await database.containers.createIfNotExists({
+      id: roadmapsContainerId,
+      partitionKey: { paths: ["/id"] }
+    });
+    roadmapsContainer = roadmapsResponse;
+    
+    console.log("Database and containers setup completed");
   } catch (error) {
-    console.error("Error setting up database and container:", error);
+    console.error("Error setting up database and containers:", error);
     throw error;
   }
 };
@@ -44,6 +55,9 @@ const ensureDbSetup = async () => {
 // Simple database reference - will be initialized properly before use
 database = client.database(databaseId);
 coursesContainer = database.container(coursesContainerId);
+
+// Initialize the roadmaps container reference
+roadmapsContainer = database.container(roadmapsContainerId);
 
 /**
  * Create a new course in Cosmos DB
@@ -360,6 +374,148 @@ export const getCourseFiles = async (courseId, userId) => {
     return course.files || [];
   } catch (error) {
     console.error("Error getting course files from Cosmos DB:", error);
+    throw error;
+  }
+};
+
+/**
+ * Create a new learning roadmap in Cosmos DB
+ * @param {Object} roadmapData - The roadmap data including topic, duration, plan
+ * @param {string} userId - The user ID who owns the roadmap
+ * @returns {Promise<Object>} The created roadmap
+ */
+export const createRoadmap = async (roadmapData, userId) => {
+  try {
+    // Ensure database and containers exist
+    await ensureDbSetup();
+    
+    const timestamp = new Date().toISOString();
+    const id = `roadmap_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    const roadmap = {
+      id,
+      ...roadmapData,
+      userId,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+    
+    console.log("Creating roadmap:", roadmap);
+    
+    const { resource } = await roadmapsContainer.items.create(roadmap);
+    return resource;
+  } catch (error) {
+    console.error("Error creating roadmap in Cosmos DB:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get a roadmap by ID
+ * @param {string} roadmapId - The roadmap ID
+ * @param {string} userId - The user ID who owns the roadmap
+ * @returns {Promise<Object>} The roadmap data
+ */
+export const getRoadmap = async (roadmapId, userId) => {
+  try {
+    // Ensure database and containers exist
+    await ensureDbSetup();
+    
+    const querySpec = {
+      query: "SELECT * FROM c WHERE c.id = @roadmapId AND c.userId = @userId",
+      parameters: [
+        { name: "@roadmapId", value: roadmapId },
+        { name: "@userId", value: userId }
+      ]
+    };
+    
+    const { resources } = await roadmapsContainer.items.query(querySpec).fetchAll();
+    return resources[0];
+  } catch (error) {
+    console.error("Error getting roadmap from Cosmos DB:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get all roadmaps for a user
+ * @param {string} userId - The user ID
+ * @returns {Promise<Array>} Array of roadmap objects
+ */
+export const getUserRoadmaps = async (userId) => {
+  try {
+    // Ensure database and containers exist
+    await ensureDbSetup();
+    
+    const querySpec = {
+      query: "SELECT * FROM c WHERE c.userId = @userId ORDER BY c.createdAt DESC",
+      parameters: [
+        { name: "@userId", value: userId }
+      ]
+    };
+    
+    const { resources } = await roadmapsContainer.items.query(querySpec).fetchAll();
+    return resources;
+  } catch (error) {
+    console.error("Error getting user roadmaps from Cosmos DB:", error);
+    throw error;
+  }
+};
+
+/**
+ * Update a roadmap
+ * @param {string} roadmapId - The roadmap ID
+ * @param {Object} roadmapData - The updated roadmap data
+ * @param {string} userId - The user ID who owns the roadmap
+ * @returns {Promise<Object>} The updated roadmap
+ */
+export const updateRoadmap = async (roadmapId, roadmapData, userId) => {
+  try {
+    // Ensure database and containers exist
+    await ensureDbSetup();
+    
+    // First get the existing roadmap to ensure it exists and belongs to the user
+    const existingRoadmap = await getRoadmap(roadmapId, userId);
+    
+    if (!existingRoadmap) {
+      throw new Error("Roadmap not found or access denied");
+    }
+    
+    const updatedRoadmap = {
+      ...existingRoadmap,
+      ...roadmapData,
+      updatedAt: new Date().toISOString()
+    };
+    
+    const { resource } = await roadmapsContainer.item(roadmapId, roadmapId).replace(updatedRoadmap);
+    return resource;
+  } catch (error) {
+    console.error("Error updating roadmap in Cosmos DB:", error);
+    throw error;
+  }
+};
+
+/**
+ * Delete a roadmap
+ * @param {string} roadmapId - The roadmap ID
+ * @param {string} userId - The user ID who owns the roadmap
+ * @returns {Promise<void>}
+ */
+export const deleteRoadmap = async (roadmapId, userId) => {
+  try {
+    // Ensure database and containers exist
+    await ensureDbSetup();
+    
+    // First get the existing roadmap to ensure it exists and belongs to the user
+    const existingRoadmap = await getRoadmap(roadmapId, userId);
+    
+    if (!existingRoadmap) {
+      throw new Error("Roadmap not found or access denied");
+    }
+    
+    await roadmapsContainer.item(roadmapId, roadmapId).delete();
+  } catch (error) {
+    console.error("Error deleting roadmap from Cosmos DB:", error);
     throw error;
   }
 };

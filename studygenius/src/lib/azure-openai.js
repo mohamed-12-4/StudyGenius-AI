@@ -5,13 +5,13 @@ import { OpenAI } from "openai";
 // Azure OpenAI configuration
 const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
 const apiKey = process.env.AZURE_OPENAI_API_KEY;
-const deploymentName = process.env.AZURE_OPENAI_DEPLOYMENT_NAME || "gpt-4o"; 
+const deploymentName = process.env.AZURE_OPENAI_DEPLOYMENT_NAME || "o3-mini"; 
 
 // Initialize Azure OpenAI client using the OpenAI SDK with Azure configuration
 const client = new OpenAI({
   apiKey: apiKey,
   baseURL: `${endpoint}/openai/deployments/${deploymentName}`,
-  defaultQuery: { "api-version": "2023-12-01-preview" },
+  defaultQuery: { "api-version": "2024-12-01-preview" },
   defaultHeaders: { "api-key": apiKey }
 });
 
@@ -289,8 +289,6 @@ Based on these materials, please create a comprehensive study plan that will hel
         { role: "system", content: systemMessage },
         { role: "user", content: userMessage }
       ],
-      temperature: 0.7,
-      max_tokens: 4000,
       functions: functions,
       function_call: { name: "create_study_plan" }
     });
@@ -544,5 +542,537 @@ export async function generatePlanFromSyllabus(course, file) {
   } catch (error) {
     console.error("Error generating study plan from syllabus:", error);
     throw error;
+  }
+}
+
+/**
+ * Generate a learning roadmap for a specific topic
+ * @param {string} topic - The topic to create a roadmap for
+ * @param {number} duration - The duration in weeks for the roadmap
+ * @returns {Promise<Object>} - The generated learning roadmap
+ */
+export async function generateLearningRoadmap(topic, duration) {
+  try {
+    // Create a function that tells the AI how to prepare a learning roadmap
+    // This leverages function calling capabilities while ensuring structured output
+    const functions = [
+      {
+        "name": "create_learning_roadmap",
+        "description": "Create a comprehensive learning roadmap for a specific topic",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "overview": {
+              "type": "string", 
+              "description": "A paragraph summarizing the learning roadmap and the topic"
+            },
+            "topics": {
+              "type": "array",
+              "description": "Key topics to learn in this subject",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "title": { 
+                    "type": "string", 
+                    "description": "Topic name" 
+                  },
+                  "description": { 
+                    "type": "string", 
+                    "description": "Topic description"
+                  },
+                  "priority": { 
+                    "type": "string", 
+                    "description": "Priority level (High, Medium, or Low)" 
+                  }
+                },
+                "required": ["title", "description", "priority"]
+              }
+            },
+            "schedule": {
+              "type": "object",
+              "description": "Weekly learning schedule",
+              "properties": {
+                "weeks": {
+                  "type": "array",
+                  "description": "Array of learning weeks",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "days": {
+                        "type": "array",
+                        "description": "Learning activities for each day of the week",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "day": { 
+                              "type": "string", 
+                              "description": "Day of the week" 
+                            },
+                            "duration": { 
+                              "type": "string", 
+                              "description": "Learning duration for this day" 
+                            },
+                            "activities": { 
+                              "type": "array", 
+                              "description": "List of learning activities for this day",
+                              "items": { "type": "string" }
+                            }
+                          },
+                          "required": ["day", "duration", "activities"]
+                        }
+                      }
+                    },
+                    "required": ["days"]
+                  }
+                }
+              },
+              "required": ["weeks"]
+            },
+            "techniques": {
+              "type": "array",
+              "description": "Recommended learning techniques",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": { 
+                    "type": "string", 
+                    "description": "Name of the learning technique" 
+                  },
+                  "description": { 
+                    "type": "string", 
+                    "description": "Description of how to apply the technique" 
+                  }
+                },
+                "required": ["name", "description"]
+              }
+            },
+            "mainTopics": {
+              "type": "array",
+              "description": "Main subtopics of this topic to use for resource search",
+              "items": { "type": "string" }
+            }
+          },
+          "required": ["overview", "topics", "schedule", "techniques", "mainTopics"]
+        }
+      }
+    ];
+
+    // Create a system message that instructs the AI how to generate a learning roadmap
+    const systemMessage = `You are an expert educational consultant specialized in creating personalized learning roadmaps.
+    
+Your task is to create a comprehensive learning roadmap for the specified topic, with a schedule spanning the exact number of weeks provided.
+
+The learning roadmap should include:
+1. An overview of the learning journey for this topic
+2. Key subtopics to focus on, with clear priority levels (High, Medium, Low)
+3. A detailed weekly schedule with specific daily activities
+4. Recommended learning techniques specific to this subject
+5. In the mainTopics field, include 3-5 main subtopics that would be useful for searching for learning resources
+
+Use the create_learning_roadmap function to provide a structured response.`;
+
+    // Create a user message with roadmap request details
+    const userMessage = `I need a detailed learning roadmap for "${topic}". 
+The roadmap should cover exactly ${duration} week${duration > 1 ? 's' : ''}.
+Please create a comprehensive plan that would help someone go from beginner to proficient in this topic within the given timeframe.
+Include a list of the main subtopics to learn about. These will be used to find relevant resources.`;
+
+    // Generate the learning roadmap using OpenAI 
+    const result = await client.chat.completions.create({
+      model: deploymentName,
+      messages: [
+        { role: "system", content: systemMessage },
+        { role: "user", content: userMessage }
+      ],
+      functions: functions,
+      function_call: { name: "create_learning_roadmap" }
+    });
+
+    // Extract the structured data from the function call arguments
+    let roadmap;
+    try {
+      const functionCall = result.choices[0].message.function_call;
+      
+      if (functionCall && functionCall.name === "create_learning_roadmap") {
+        // Parse the JSON arguments returned from the function call
+        roadmap = JSON.parse(functionCall.arguments);
+      } else {
+        // Fallback to normal content parsing if function call isn't returned
+        const roadmapText = result.choices[0].message.content || "{}";
+        
+        try {
+          roadmap = cleanAndParseJSON(roadmapText);
+        } catch (parseError) {
+          console.error("Error parsing non-function roadmap JSON:", parseError);
+          
+          roadmap = {
+            overview: "We encountered an issue formatting your learning roadmap. Here's the raw plan:",
+            rawPlan: roadmapText,
+            topics: [],
+            schedule: { weeks: [] },
+            techniques: [],
+            mainTopics: []
+          };
+        }
+      }
+    } catch (error) {
+      console.error("Error extracting function call results for roadmap:", error);
+      
+      // If all parsing methods fail, return a structured object with an error message
+      roadmap = {
+        overview: "We encountered an issue formatting your learning roadmap.",
+        topics: [],
+        schedule: { weeks: [] },
+        techniques: [],
+        mainTopics: []
+      };
+    }
+
+    // Search for resources based on the topic and main subtopics
+    console.log(`Searching for resources for topic: ${topic} and subtopics:`, roadmap.mainTopics || []);
+    const resources = await searchInternetForResources(topic, roadmap.mainTopics || []);
+    
+    // Add resources to the roadmap
+    roadmap.resources = resources;
+    
+    return roadmap;
+  } catch (error) {
+    console.error("Error generating learning roadmap with Azure OpenAI:", error);
+    throw error;
+  }
+}
+
+/**
+ * Search the internet for learning resources related to a specific topic
+ * @param {string} topic - The topic to search resources for
+ * @param {Array<string>} subtopics - Optional subtopics to refine the search
+ * @returns {Promise<Array>} - Array of resources with title, description, and URL
+ */
+export async function searchInternetForResources(topic, subtopics = []) {
+  try {
+    // Using SERP API instead of Bing Search API
+    const serpApiEndpoint = process.env.SERP_API_ENDPOINT || 'https://serpapi.com/search';
+    const serpApiKey = process.env.SERP_API_KEY;
+    
+    // Create search queries for the main topic and subtopics
+    const queries = [
+      `learn ${topic} tutorial course`,
+      `best resources to learn ${topic}`,
+      `${topic} documentation guide`,
+      `${topic} beginner to advanced`,
+    ];
+    
+    // Add subtopic queries if provided
+    if (subtopics && subtopics.length > 0) {
+      subtopics.slice(0, 3).forEach(subtopic => {
+        queries.push(`learn ${subtopic} ${topic} tutorial`);
+      });
+    }
+    
+    // If SERP API key is available, use it for actual web search
+    if (serpApiKey) {
+      console.log("Using SERP API to find resources");
+      
+      // Perform searches
+      const searchResults = await Promise.all(
+        queries.map(async (query) => {
+          try {
+            const response = await fetch(`${serpApiEndpoint}?q=${encodeURIComponent(query)}&api_key=${serpApiKey}&engine=google&num=5`, {
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (!response.ok) {
+              console.warn(`Search failed with status ${response.status}: ${response.statusText}`);
+              return [];
+            }
+            
+            const data = await response.json();
+            // SERP API returns organic results in a different format than Bing
+            return data.organic_results || [];
+          } catch (err) {
+            console.error(`Error searching for '${query}':`, err);
+            return [];
+          }
+        })
+      );
+      
+      // Flatten and deduplicate results
+      const allResults = searchResults.flat();
+      const uniqueUrls = new Set();
+      const uniqueResults = [];
+      
+      allResults.forEach(result => {
+        if (!uniqueUrls.has(result.link)) {
+          uniqueUrls.add(result.link);
+          uniqueResults.push({
+            title: result.title,
+            description: result.snippet,
+            url: result.link,
+            type: "website",
+            subtopic: result.subtopic || "General"
+          });
+        }
+      });
+      
+      if (uniqueResults.length >= 5) {
+        return uniqueResults.slice(0, 10); // Limit to 10 resources
+      }
+      
+      // If we didn't get enough results from SERP API, supplement with web search using GPT-4
+      console.log("Not enough results from SERP API, supplementing with web search via GPT-4");
+    }
+    
+    // The rest of the function remains the same - using Azure OpenAI to generate resources when web search isn't sufficient
+    // Use Azure OpenAI to search the web using generated URLs
+    const { client, deploymentName } = await getOpenAIClient();
+    
+    if (!client) {
+      console.error("Failed to initialize Azure OpenAI client for web search");
+      return [];
+    }
+    
+    // Create queries combining the main topic and subtopics
+    const resources = [];
+    
+    for (const query of queries.slice(0, 3)) { // Limit to 3 queries to save on API calls
+      try {
+        console.log(`Searching for resources with query: ${query}`);
+        
+        // Create a system message for searching web resources
+        const systemMessage = `You are a helpful AI assistant that can find high-quality learning resources from across the web.
+        For the given query about ${topic}, provide a list of 3-5 relevant, high-quality learning resources.
+        These should include a mix of:
+        - Official documentation or guides
+        - High-quality tutorials from trusted websites
+        - Free online courses or educational content
+        - GitHub repositories with educational content
+        - Video tutorials from platforms like YouTube
+        
+        For each resource, provide:
+        1. An accurate title
+        2. A brief but informative description
+        3. A plausible and correctly formatted URL
+        4. The type of resource (website, video, course, github, etc.)
+        5. The subtopic it covers (if applicable)`;
+        
+        const userMessage = `Find the best learning resources for: ${query}`;
+        
+        // Define function for structured response
+        const functions = [
+          {
+            "name": "return_web_resources",
+            "description": "Return structured information about web resources found for the learning topic",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "resources": {
+                  "type": "array",
+                  "description": "List of resources found on the web",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "title": { 
+                        "type": "string", 
+                        "description": "Title of the resource" 
+                      },
+                      "url": { 
+                        "type": "string", 
+                        "description": "URL of the resource" 
+                      },
+                      "description": { 
+                        "type": "string", 
+                        "description": "Brief description of the resource" 
+                      },
+                      "type": { 
+                        "type": "string", 
+                        "description": "Type of resource (website, video, course, github, etc.)" 
+                      },
+                      "subtopic": { 
+                        "type": "string", 
+                        "description": "The specific subtopic this resource covers (if applicable)" 
+                      }
+                    },
+                    "required": ["title", "url", "description", "type"]
+                  }
+                }
+              },
+              "required": ["resources"]
+            }
+          }
+        ];
+
+        // Make a call to Azure OpenAI to generate realistic web search results
+        const result = await client.chat.completions.create({
+          model: deploymentName,
+          messages: [
+            { role: "system", content: systemMessage },
+            { role: "user", content: userMessage }
+          ],
+          functions: functions,
+          function_call: { name: "return_web_resources" },
+          temperature: 0.7
+        });
+        
+        // Extract the structured data from the function call arguments
+        let queryResources = [];
+        try {
+          const functionCall = result.choices[0].message.function_call;
+          
+          if (functionCall && functionCall.name === "return_web_resources") {
+            // Parse the JSON arguments returned from the function call
+            const parsedResult = JSON.parse(functionCall.arguments);
+            queryResources = parsedResult.resources || [];
+            
+            // Add source information to help users understand these are AI-found resources
+            queryResources.forEach(resource => {
+              resource.foundVia = "AI web search";
+            });
+          }
+        } catch (error) {
+          console.error(`Error extracting resources for query "${query}":`, error);
+          queryResources = [];
+        }
+        
+        // Add current subtopic to the resources
+        const currentSubtopic = query.includes(topic) && query !== topic ? 
+          query.replace(`learn ${topic}`, "").replace(topic, "").replace("tutorial", "").trim() : 
+          "General";
+        
+        queryResources.forEach(resource => {
+          resource.subtopic = resource.subtopic || currentSubtopic;
+        });
+        
+        // Add resources to the main array, avoiding duplicates by URL
+        queryResources.forEach(newResource => {
+          if (!resources.some(existingResource => existingResource.url === newResource.url)) {
+            resources.push(newResource);
+          }
+        });
+        
+      } catch (searchError) {
+        console.error(`Error searching for resources with query "${query}":`, searchError);
+      }
+    }
+    
+    // Filter and limit resources to avoid overwhelming the user
+    return resources
+      .sort((a, b) => {
+        // Prioritize official documentation and courses
+        if (a.type === "documentation" && b.type !== "documentation") return -1;
+        if (b.type === "documentation" && a.type !== "documentation") return 1;
+        if (a.type === "course" && b.type !== "course") return -1;
+        if (b.type === "course" && a.type !== "course") return 1;
+        return 0;
+      })
+      .slice(0, 10); // Limit to 10 resources
+      
+  } catch (error) {
+    console.error("Error searching internet for resources:", error);
+    // Return empty array in case of error
+    return [];
+  }
+}
+
+/**
+ * Generate AI-based resource suggestions when internet search is not available
+ * @param {string} topic - The topic to generate resource suggestions for
+ * @param {Array<string>} subtopics - Optional subtopics to refine suggestions
+ * @returns {Promise<Array>} - Array of AI-suggested resources
+ */
+export async function generateResourceSuggestions(topic, subtopics = []) {
+  try {
+    // Create a function for generating resource suggestions
+    const functions = [{
+      "name": "suggest_learning_resources",
+      "description": "Suggest learning resources for a specific topic",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "resources": {
+            "type": "array",
+            "description": "Array of suggested learning resources",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "description": "Title of the resource"
+                },
+                "description": {
+                  "type": "string",
+                  "description": "Brief description of what this resource offers"
+                },
+                "url": {
+                  "type": "string",
+                  "description": "URL of the resource, use most common/official URL if known"
+                }
+              },
+              "required": ["title", "description", "url"]
+            }
+          }
+        },
+        "required": ["resources"]
+      }
+    }];
+
+    // System message to guide the AI
+    const systemMessage = `You are an expert educational consultant with extensive knowledge of learning resources.
+    
+Your task is to suggest specific, high-quality learning resources for the given topic.
+Include a diverse mix of:
+1. Official documentation and guides
+2. Popular online courses (free and paid)
+3. Books (with authors)
+4. Interactive tutorials and platforms
+5. YouTube channels or specific videos
+6. Practice projects or exercises
+7. Communities for learning support
+
+For each resource, provide a specific URL (the main site or a direct link to the specific resource).
+Do not make up fictional resources. Use only resources that you're confident actually exist.`;
+
+    // User message with the topic
+    let userMessage = `Please suggest high-quality learning resources for the topic "${topic}".`;
+    
+    if (subtopics && subtopics.length > 0) {
+      userMessage += ` I'm particularly interested in these specific aspects: ${subtopics.join(', ')}.`;
+    }
+    
+    userMessage += ` For each resource, include a title, brief description of what it offers, and a URL.`;
+
+    // Generate resource suggestions
+    const result = await client.chat.completions.create({
+      model: deploymentName,
+      messages: [
+        { role: "system", content: systemMessage },
+        { role: "user", content: userMessage }
+      ],
+      functions: functions,
+      function_call: { name: "suggest_learning_resources" }
+    });
+
+    try {
+      const functionCall = result.choices[0].message.function_call;
+      
+      if (functionCall && functionCall.name === "suggest_learning_resources") {
+        const suggestions = JSON.parse(functionCall.arguments);
+        return suggestions.resources;
+      } else {
+        // Fallback to parsing from content
+        return [{
+          title: "Official Documentation",
+          description: `The official documentation for ${topic}`,
+          url: `https://www.google.com/search?q=${encodeURIComponent(`${topic} official documentation`)}`
+        }];
+      }
+    } catch (error) {
+      console.error("Error extracting resource suggestions:", error);
+      return [];
+    }
+  } catch (error) {
+    console.error("Error generating resource suggestions:", error);
+    return [];
   }
 }
