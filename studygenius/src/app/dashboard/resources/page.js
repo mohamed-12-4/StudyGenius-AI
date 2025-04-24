@@ -4,10 +4,12 @@ import { useState, useEffect } from 'react';
 import { FiBookOpen, FiClock, FiCalendar, FiMap, FiSearch, FiSave, FiPlus } from "react-icons/fi";
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
-import { generateLearningRoadmap, generateResourceSuggestions } from '@/lib/azure-openai'; // Add generateResourceSuggestions
-import { createRoadmap, getUserRoadmaps, getRoadmap } from '@/lib/azure-cosmos'; // Using correct function names
+// Replace direct imports with fetch API
+// import { generateLearningRoadmap, generateResourceSuggestions } from '@/lib/azure-openai';
+import { createRoadmap, getUserRoadmaps, getRoadmap } from '@/lib/azure-cosmos'; 
 import RoadmapViewer from '@/components/resources/RoadmapViewer';
-import { useRouter } from 'next/navigation'; // Import useRouter
+import { useRouter } from 'next/navigation';
+import { getJWT } from '@/lib/appwrite'; // Import the getJWT function
 
 export default function Resources() {
   const [topic, setTopic] = useState('');
@@ -84,8 +86,25 @@ export default function Resources() {
       setIsGenerating(true);
       toast.info('Generating your learning roadmap. This may take a minute...');
       
-      // Generate the roadmap using Azure OpenAI
-      const generatedRoadmap = await generateLearningRoadmap(topic, duration);
+      // Get the JWT token
+      const token = await getJWT();
+
+      // Use the API endpoint instead of direct library call
+      const response = await fetch('/api/roadmap', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` // Include the token in the Authorization header
+        },
+        body: JSON.stringify({ topic, durationWeeks: duration }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.message || 'Failed to generate roadmap');
+      }
+      
+      const { roadmap: generatedRoadmap } = await response.json();
       
       // Save the roadmap
       const savedRoadmap = await createRoadmap(
@@ -113,7 +132,6 @@ export default function Resources() {
     }
   };
 
-  // Improved generateAdditionalResources function that properly uses the generateResourceSuggestions function
   const handleGenerateAdditionalResources = async () => {
     if (!roadmap || !topic) {
       toast.error('Please generate or select a roadmap first');
@@ -130,8 +148,25 @@ export default function Resources() {
       setIsGeneratingResources(true);
       toast.info('Looking for additional learning resources...');
       
-      // Generate additional resources using Azure OpenAI's dedicated suggestion function
-      const additionalResources = await generateResourceSuggestions(topic);
+      // Get the JWT token
+      const token = await getJWT();
+      
+      // Use the API endpoint instead of direct library call
+      const response = await fetch('/api/resources', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` // Include the token in the Authorization header
+        },
+        body: JSON.stringify({ topic }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.message || 'Failed to generate resources');
+      }
+      
+      const { resources: additionalResources } = await response.json();
       
       // Make sure we have resources from the API
       if (!additionalResources || additionalResources.length === 0) {

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { FiCalendar, FiClock, FiList, FiBookOpen, FiTarget, FiBook, FiRefreshCw, FiDownload, FiFile } from 'react-icons/fi';
 import { toast } from 'sonner';
-import { generateStudyPlan } from '@/lib/azure-openai';
+// Remove direct import from azure-openai
 import { saveStudyPlan } from '@/lib/azure-cosmos'; // Changed from appwrite to azure-cosmos
 import { useAuth } from '@/context/AuthContext';
 
@@ -40,8 +40,24 @@ export default function StudyPlanViewer({ course, files, existingPlan, isGenerat
 
     try {
       setIsGenerating(true);
-      // Generate the study plan using Azure OpenAI
-      const generatedPlan = await generateStudyPlan(course, files);
+      
+      // Use the API endpoint instead of directly calling Azure OpenAI
+      const response = await fetch('/api/study-plan/route', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          course,
+          files,
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API request failed with status ${response.status}`);
+      }
+      
+      const generatedPlan = await response.json();
       
       if (!user) {
         toast.error('User authentication required to save study plan');
