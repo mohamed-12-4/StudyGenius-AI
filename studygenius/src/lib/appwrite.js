@@ -1,21 +1,65 @@
 import { Client, Account, Databases, Query, ID } from 'appwrite';
 
 // Initialize Appwrite client
+const appwriteEndpoint = 'https://fra.cloud.appwrite.io/v1'
+const appwriteProject = '67ebd9d30008916bc91f'
 const client = new Client();
 
 client
-    .setEndpoint('https://fra.cloud.appwrite.io/v1') // Replace with your Appwrite endpoint
-    .setProject('67ebd9d30008916bc91f'); // Replace with your Appwrite project ID
+    .setEndpoint(appwriteEndpoint) 
+    .setProject(appwriteProject); 
 
 // Initialize Appwrite services
 export const account = new Account(client);
 export const databases = new Databases(client);
 
-// Database and Collection IDs
-export const DATABASE_ID = 'studygenius'; // Replace with your database ID
-export const COURSES_COLLECTION_ID = 'courses';
-export const FILES_COLLECTION_ID = 'files';
-export const STUDY_PLANS_COLLECTION_ID = 'study_plans';
+
+
+// Helper function to verify session in API routes
+export const verifySession = async (request) => {
+  try {
+    // Get authorization header
+    const authHeader = request.headers.get('Authorization');
+    
+    if (!authHeader) {
+      console.log('No Authorization header found');
+      return null;
+    }
+
+    // Check if it's a Bearer token
+    if (authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      console.log('Found JWT token in Authorization header');
+      
+      // Create a new client instance with the JWT token
+      const apiClient = new Client();
+      apiClient
+        .setEndpoint(appwriteEndpoint)
+        .setProject(appwriteProject)
+        .setJWT(token);
+      
+      // Try to get the current user with this JWT
+      const apiAccount = new Account(apiClient);
+      try {
+        const user = await apiAccount.get();
+        if (user) {
+          return user.$id; // Return the user ID
+        }
+      } catch (error) {
+        console.error('Invalid JWT token:', error);
+        return null;
+      }
+    } else {
+      console.log('Authorization header is not a Bearer token');
+      return null;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error verifying session:', error);
+    return null;
+  }
+};
 
 // Helper functions for authentication
 export const createUser = async (email, password, name) => {
@@ -62,30 +106,28 @@ export const login = async (email, password) => {
             console.log('No active session detected');
         }
         
-        // Create a new session
-        return await account.createEmailPasswordSession(email, password);
+        // Create a new session with cookies that work across the application
+        const session = await account.createEmailPasswordSession(email, password);
+        
+        // Explicitly create a client with the session for use in the browser
+        const clientSession = new Client()
+            .setEndpoint(appwriteEndpoint)
+            .setProject(appwriteProject)
+            .setSession(session.secret); // Use session secret to ensure cookies are set properly
+        
+        return session;
     } catch (error) {
         // If we still get "active session" error, try one more time with a forceful approach
         if (error.message && error.message.includes('session is active')) {
             try {
                 // Try to delete all sessions for this user before creating a new one
-                const sessions = await account.listSessions();
-                for (const session of sessions.sessions) {
-                    try {
-                        await account.deleteSession(session.$id);
-                    } catch (deleteError) {
-                        console.log(`Failed to delete session ${session.$id}:`, deleteError);
-                    }
-                }
-                
-                // Try to create a session again after deleting all
+                await logout();
                 return await account.createEmailPasswordSession(email, password);
-            } catch (innerError) {
-                console.error('Error handling active session:', innerError);
-                throw innerError;
+            } catch (secondError) {
+                console.error('Error in second login attempt:', secondError);
+                throw secondError;
             }
         }
-        
         console.error('Error logging in:', error);
         throw error;
     }
@@ -144,224 +186,56 @@ export const getActiveSessions = async () => {
     }
 };
 
-// Course Management Functions
-export const createCourse = async (courseData) => {
+// Helper to get JWT token for API authentication
+export const getJWT = async () => {
     try {
-        const userId = (await getCurrentUser()).$id;
-        
-        // Create course document
-        const course = await databases.createDocument(
-            DATABASE_ID,
-            COURSES_COLLECTION_ID,
-            ID.unique(),
-            {
-                ...courseData,
-                userId,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-            }
-        );
-        
-        return course;
-    } catch (error) {
-        console.error('Error creating course:', error);
-        throw error;
-    }
-};
-
-export const updateCourse = async (courseId, courseData) => {
-    try {
-        const course = await databases.updateDocument(
-            DATABASE_ID,
-            COURSES_COLLECTION_ID,
-            courseId,
-            {
-                ...courseData,
-                updatedAt: new Date().toISOString(),
-            }
-        );
-        
-        return course;
-    } catch (error) {
-        console.error('Error updating course:', error);
-        throw error;
-    }
-};
-
-export const deleteCourse = async (courseId) => {
-    try {
-        await databases.deleteDocument(
-            DATABASE_ID,
-            COURSES_COLLECTION_ID,
-            courseId
-        );
-        
-        return { success: true };
-    } catch (error) {
-        console.error('Error deleting course:', error);
-        throw error;
-    }
-};
-
-export const getCourse = async (courseId) => {
-    try {
-        const course = await databases.getDocument(
-            DATABASE_ID,
-            COURSES_COLLECTION_ID,
-            courseId
-        );
-        
-        return course;
-    } catch (error) {
-        console.error('Error getting course:', error);
-        throw error;
-    }
-};
-
-export const getUserCourses = async () => {
-    try {
-        const userId = (await getCurrentUser()).$id;
-        
-        const courses = await databases.listDocuments(
-            DATABASE_ID,
-            COURSES_COLLECTION_ID,
-            [
-                Query.equal('userId', userId),
-                Query.orderDesc('updatedAt')
-            ]
-        );
-        
-        return courses.documents;
-    } catch (error) {
-        console.error('Error getting user courses:', error);
-        throw error;
-    }
-};
-
-// File Management Functions
-export const addFileRecord = async (fileData, courseId) => {
-    try {
-        const userId = (await getCurrentUser()).$id;
-        
-        const file = await databases.createDocument(
-            DATABASE_ID,
-            FILES_COLLECTION_ID,
-            ID.unique(),
-            {
-                ...fileData,
-                userId,
-                courseId,
-                createdAt: new Date().toISOString(),
-            }
-        );
-        
-        return file;
-    } catch (error) {
-        console.error('Error adding file record:', error);
-        throw error;
-    }
-};
-
-export const deleteFileRecord = async (fileId) => {
-    try {
-        await databases.deleteDocument(
-            DATABASE_ID,
-            FILES_COLLECTION_ID,
-            fileId
-        );
-        
-        return { success: true };
-    } catch (error) {
-        console.error('Error deleting file record:', error);
-        throw error;
-    }
-};
-
-export const getCourseFiles = async (courseId) => {
-    try {
-        const files = await databases.listDocuments(
-            DATABASE_ID,
-            FILES_COLLECTION_ID,
-            [
-                Query.equal('courseId', courseId),
-                Query.orderDesc('createdAt')
-            ]
-        );
-        
-        return files.documents;
-    } catch (error) {
-        console.error('Error getting course files:', error);
-        throw error;
-    }
-};
-
-// Study Plan Management Functions
-export const saveStudyPlan = async (studyPlanData, courseId) => {
-    try {
-        const userId = (await getCurrentUser()).$id;
-        
-        // Check if a study plan already exists for this course
-        const existingPlans = await databases.listDocuments(
-            DATABASE_ID,
-            STUDY_PLANS_COLLECTION_ID,
-            [
-                Query.equal('userId', userId),
-                Query.equal('courseId', courseId),
-            ]
-        );
-        
-        if (existingPlans.documents.length > 0) {
-            // Update existing study plan
-            const studyPlan = await databases.updateDocument(
-                DATABASE_ID,
-                STUDY_PLANS_COLLECTION_ID,
-                existingPlans.documents[0].$id,
-                {
-                    ...studyPlanData,
-                    updatedAt: new Date().toISOString(),
-                }
-            );
-            
-            return studyPlan;
-        } else {
-            // Create new study plan
-            const studyPlan = await databases.createDocument(
-                DATABASE_ID,
-                STUDY_PLANS_COLLECTION_ID,
-                ID.unique(),
-                {
-                    ...studyPlanData,
-                    userId,
-                    courseId,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                }
-            );
-            
-            return studyPlan;
+        // Create a JWT token using the Appwrite SDK
+        const token = await account.createJWT();
+        if (token) {
+            return token.jwt;
         }
+        return null;
     } catch (error) {
-        console.error('Error saving study plan:', error);
-        throw error;
+        console.error('Error getting JWT token:', error);
+        return null;
     }
 };
 
-export const getStudyPlan = async (courseId) => {
+// Helper function to make authenticated API calls
+export const callApi = async (url, method = 'GET', data = null) => {
     try {
-        const userId = (await getCurrentUser()).$id;
+        // Get JWT token
+        const jwt = await getJWT();
+        if (!jwt) {
+            throw new Error('Failed to get authentication token');
+        }
         
-        const studyPlans = await databases.listDocuments(
-            DATABASE_ID,
-            STUDY_PLANS_COLLECTION_ID,
-            [
-                Query.equal('userId', userId),
-                Query.equal('courseId', courseId),
-            ]
-        );
+        // Prepare fetch options
+        const options = {
+            method,
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${jwt}`
+            }
+        };
         
-        return studyPlans.documents.length > 0 ? studyPlans.documents[0] : null;
+        // Add body for non-GET requests
+        if (data && method !== 'GET') {
+            options.body = JSON.stringify(data);
+        }
+        
+        // Make the API call
+        const response = await fetch(url, options);
+        
+        // Handle response
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `API request failed with status ${response.status}`);
+        }
+        
+        return await response.json();
     } catch (error) {
-        console.error('Error getting study plan:', error);
+        console.error(`Error calling API ${url}:`, error);
         throw error;
     }
 };

@@ -13,7 +13,7 @@ import {
   deleteCourse
 } from '@/lib/azure-cosmos';
 import { uploadFile, deleteFile, getFilesList } from '@/lib/azure-storage';
-import { generateStudyPlan } from '@/lib/azure-openai';
+import { getJWT } from '@/lib/appwrite'; // Import the getJWT function
 import CourseForm from '@/components/planner/CourseForm';
 import FileUploader from '@/components/planner/FileUploader';
 import StudyPlanViewer from '@/components/planner/StudyPlanViewer';
@@ -198,8 +198,29 @@ export default function StudyPlanner() {
 
     try {
       setIsGeneratingPlan(true);
-      // Generate the study plan
-      const generatedPlan = await generateStudyPlan(selectedCourse, courseFiles);
+      
+      // Get JWT token for authentication
+      const token = await getJWT();
+      
+      // Use API endpoint instead of direct library call
+      const response = await fetch('/api/study-plan', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` // Include the token in the Authorization header
+        },
+        body: JSON.stringify({
+          course: selectedCourse,
+          files: courseFiles,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate study plan');
+      }
+
+      const { studyPlan: generatedPlan } = await response.json();
       
       // Save the study plan to the database
       const savedPlan = await saveStudyPlan(generatedPlan, selectedCourse.id || selectedCourse.$id, user.id || user.$id);

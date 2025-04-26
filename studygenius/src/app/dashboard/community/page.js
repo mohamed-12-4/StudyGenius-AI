@@ -1,3 +1,13 @@
+"use client";
+
+import { useState, useEffect } from 'react';
+import {
+  getStudyGroups,
+  getCommunityDiscussions,
+  getUpcomingEvents,
+  getSharedResources,
+  getCommunityStats
+} from '@/lib/dashboard-service';
 import { 
   FiUsers, 
   FiMessageSquare, 
@@ -241,31 +251,179 @@ const sharedResources = [
 ];
 
 export default function Community() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  const [studyGroups, setStudyGroups] = useState([]);
+  const [communityDiscussions, setCommunityDiscussions] = useState([]);
+  const [upcomingEvents, setUpcomingEvents] = useState([]);
+  const [sharedResources, setSharedResources] = useState([]);
+  const [communityStats, setCommunityStats] = useState({
+    studyBuddies: 0,
+    activeDiscussions: 0,
+    sharedResources: 0
+  });
+
+  const [isNewPostModalOpen, setIsNewPostModalOpen] = useState(false);
+
+  const handleNewPostClick = () => {
+    setIsNewPostModalOpen(true);
+  };
+
+  const handleCloseNewPostModal = () => {
+    setIsNewPostModalOpen(false);
+  };
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [user, loading, router]);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [groups, discussions, events, resources] = await Promise.all([
+          getStudyGroups(),
+          getCommunityDiscussions(),
+          getUpcomingEvents(),
+          getSharedResources()
+        ]);
+
+        setStudyGroups(groups);
+        setCommunityDiscussions(discussions);
+        setUpcomingEvents(events);
+        setSharedResources(resources);
+      } catch (error) {
+        console.error('Error fetching community data:', error);
+      }
+    }
+
+    if (user) {
+      fetchData();
+    }
+  }, [user]);
+
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        const stats = await getCommunityStats();
+        setCommunityStats(stats);
+      } catch (error) {
+        console.error('Error fetching community stats:', error);
+      }
+    }
+
+    if (user) {
+      fetchStats();
+    }
+  }, [user]);
+
+  if (loading || !user) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
+  const defaultStudyGroup = {
+    id: 'ai-study-group',
+    name: 'AI Study Group',
+    course: 'Artificial Intelligence',
+    members: 100,
+    activity: 'High',
+    lastActive: 'Just now',
+    isMember: true
+  };
+
   return (
     <div className="flex flex-col gap-6">
-      {/* Page header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <h1 className="heading-1 text-gray-900 dark:text-white">Community</h1>
-        <div className="flex items-center space-x-2">
-          <div className="relative max-w-xs">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <FiSearch className="h-4 w-4 text-gray-400" />
-            </div>
-            <input
-              type="text"
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm placeholder-gray-500 dark:placeholder-gray-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              placeholder="Search community..."
-            />
-          </div>
-          <button className="p-2 rounded-md text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
-            <FiFilter className="h-4 w-4" />
-          </button>
-          <button className="flex items-center gap-1 px-3 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 transition-colors">
-            <FiPlusCircle className="h-4 w-4" />
-            <span>New Post</span>
+      {/* Study groups at the top */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="heading-3 text-gray-900 dark:text-white">
+            <FiUsers className="inline-block mr-2 text-primary-500" />
+            Study Groups
+          </h2>
+          <button className="text-sm text-primary-600 hover:text-primary-500 flex items-center">
+            <FiPlusCircle className="mr-1" /> Create Study Group
           </button>
         </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
+            <thead>
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Group Name
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Course
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Members
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Activity
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Last Active
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+              {[defaultStudyGroup, ...studyGroups].map((group) => (
+                <tr key={group.id} className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900 dark:text-white">{group.name}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-500 dark:text-gray-400">{group.course}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900 dark:text-white">{group.members}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span 
+                      className={`px-2 py-1 text-xs rounded-full ${
+                        group.activity === 'High'
+                          ? 'bg-success-100 dark:bg-success-900/30 text-success-800 dark:text-success-300'
+                          : 'bg-warning-100 dark:bg-warning-900/30 text-warning-800 dark:text-warning-300'
+                      }`}
+                    >
+                      {group.activity}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-500 dark:text-gray-400">{group.lastActive}</div>
+                  </td>
+                  <td className="px-6 py-4 text-right text-sm font-medium whitespace-nowrap">
+                    {group.isMember ? (
+                      <span className="text-success-600 dark:text-success-400 mr-3">Joined</span>
+                    ) : (
+                      <button className="text-primary-600 hover:text-primary-500 mr-3">Join</button>
+                    )}
+                    {group.id === 'ai-study-group' ? (
+                      <Link href="/dashboard/community/ai-study-group" className="text-primary-600 hover:text-primary-500">
+                        View
+                      </Link>
+                    ) : (
+                      <button className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">View</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
+
+      {/* AI Chatbot for AI Study Group */}
+      <AIChatbot />
 
       {/* Community stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -273,7 +431,7 @@ export default function Community() {
           <div className="p-3 rounded-full bg-primary-100 dark:bg-primary-900/30 mb-3">
             <FiUsers className="h-6 w-6 text-primary-600 dark:text-primary-400" />
           </div>
-          <p className="text-3xl font-bold text-gray-900 dark:text-white">124</p>
+          <p className="text-3xl font-bold text-gray-900 dark:text-white">{communityStats.studyBuddies}</p>
           <p className="text-sm text-gray-500 dark:text-gray-400">Study Buddies</p>
         </div>
         
@@ -281,7 +439,7 @@ export default function Community() {
           <div className="p-3 rounded-full bg-secondary-100 dark:bg-secondary-900/30 mb-3">
             <FiMessageSquare className="h-6 w-6 text-secondary-600 dark:text-secondary-400" />
           </div>
-          <p className="text-3xl font-bold text-gray-900 dark:text-white">58</p>
+          <p className="text-3xl font-bold text-gray-900 dark:text-white">{communityStats.activeDiscussions}</p>
           <p className="text-sm text-gray-500 dark:text-gray-400">Active Discussions</p>
         </div>
         
@@ -289,7 +447,7 @@ export default function Community() {
           <div className="p-3 rounded-full bg-success-100 dark:bg-success-900/30 mb-3">
             <FiBook className="h-6 w-6 text-success-600 dark:text-success-400" />
           </div>
-          <p className="text-3xl font-bold text-gray-900 dark:text-white">210</p>
+          <p className="text-3xl font-bold text-gray-900 dark:text-white">{communityStats.sharedResources}</p>
           <p className="text-sm text-gray-500 dark:text-gray-400">Shared Resources</p>
         </div>
       </div>
@@ -446,83 +604,6 @@ export default function Community() {
         </div>
       </div>
 
-      {/* Study groups */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="heading-3 text-gray-900 dark:text-white">
-            <FiUsers className="inline-block mr-2 text-primary-500" />
-            Study Groups
-          </h2>
-          <button className="text-sm text-primary-600 hover:text-primary-500 flex items-center">
-            <FiPlusCircle className="mr-1" /> Create Study Group
-          </button>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
-            <thead>
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Group Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Course
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Members
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Activity
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Last Active
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-              {studyGroups.map((group) => (
-                <tr key={group.id} className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900 dark:text-white">{group.name}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500 dark:text-gray-400">{group.course}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900 dark:text-white">{group.members}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span 
-                      className={`px-2 py-1 text-xs rounded-full ${
-                        group.activity === 'High'
-                          ? 'bg-success-100 dark:bg-success-900/30 text-success-800 dark:text-success-300'
-                          : 'bg-warning-100 dark:bg-warning-900/30 text-warning-800 dark:text-warning-300'
-                      }`}
-                    >
-                      {group.activity}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500 dark:text-gray-400">{group.lastActive}</div>
-                  </td>
-                  <td className="px-6 py-4 text-right text-sm font-medium whitespace-nowrap">
-                    {group.isMember ? (
-                      <span className="text-success-600 dark:text-success-400 mr-3">Joined</span>
-                    ) : (
-                      <button className="text-primary-600 hover:text-primary-500 mr-3">Join</button>
-                    )}
-                    <button className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">View</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
       {/* Shared study resources */}
       <div className="card">
         <div className="flex items-center justify-between mb-6">
@@ -585,6 +666,11 @@ export default function Community() {
           ))}
         </div>
       </div>
+
+      {/* New Post Modal */}
+      {isNewPostModalOpen && (
+        <NewPostModal onClose={handleCloseNewPostModal} />
+      )}
     </div>
   );
 }

@@ -379,143 +379,117 @@ export const getCourseFiles = async (courseId, userId) => {
 };
 
 /**
- * Create a new learning roadmap in Cosmos DB
- * @param {Object} roadmapData - The roadmap data including topic, duration, plan
- * @param {string} userId - The user ID who owns the roadmap
- * @returns {Promise<Object>} The created roadmap
+ * Initialize database and container references for community data
  */
-export const createRoadmap = async (roadmapData, userId) => {
+const studyGroupsContainerId = "studyGroups";
+const communityDiscussionsContainerId = "communityDiscussions";
+const upcomingEventsContainerId = "upcomingEvents";
+const sharedResourcesContainerId = "sharedResources";
+
+let studyGroupsContainer;
+let communityDiscussionsContainer;
+let upcomingEventsContainer;
+let sharedResourcesContainer;
+
+const ensureCommunityDbSetup = async () => {
   try {
-    // Ensure database and containers exist
-    await ensureDbSetup();
-    
-    const timestamp = new Date().toISOString();
-    const id = `roadmap_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    const roadmap = {
-      id,
-      ...roadmapData,
-      userId,
-      createdAt: timestamp,
-      updatedAt: timestamp
-    };
-    
-    console.log("Creating roadmap:", roadmap);
-    
-    const { resource } = await roadmapsContainer.items.create(roadmap);
-    return resource;
+    // Create studyGroups container if it doesn't exist
+    const { container: studyGroupsResponse } = await database.containers.createIfNotExists({
+      id: studyGroupsContainerId,
+      partitionKey: { paths: ["/id"] }
+    });
+    studyGroupsContainer = studyGroupsResponse;
+
+    // Create communityDiscussions container if it doesn't exist
+    const { container: communityDiscussionsResponse } = await database.containers.createIfNotExists({
+      id: communityDiscussionsContainerId,
+      partitionKey: { paths: ["/id"] }
+    });
+    communityDiscussionsContainer = communityDiscussionsResponse;
+
+    // Create upcomingEvents container if it doesn't exist
+    const { container: upcomingEventsResponse } = await database.containers.createIfNotExists({
+      id: upcomingEventsContainerId,
+      partitionKey: { paths: ["/id"] }
+    });
+    upcomingEventsContainer = upcomingEventsResponse;
+
+    // Create sharedResources container if it doesn't exist
+    const { container: sharedResourcesResponse } = await database.containers.createIfNotExists({
+      id: sharedResourcesContainerId,
+      partitionKey: { paths: ["/id"] }
+    });
+    sharedResourcesContainer = sharedResourcesResponse;
+
+    console.log("Community database and containers setup completed");
   } catch (error) {
-    console.error("Error creating roadmap in Cosmos DB:", error);
+    console.error("Error setting up community database and containers:", error);
     throw error;
   }
 };
 
-/**
- * Get a roadmap by ID
- * @param {string} roadmapId - The roadmap ID
- * @param {string} userId - The user ID who owns the roadmap
- * @returns {Promise<Object>} The roadmap data
- */
-export const getRoadmap = async (roadmapId, userId) => {
-  try {
-    // Ensure database and containers exist
-    await ensureDbSetup();
-    
-    const querySpec = {
-      query: "SELECT * FROM c WHERE c.id = @roadmapId AND c.userId = @userId",
-      parameters: [
-        { name: "@roadmapId", value: roadmapId },
-        { name: "@userId", value: userId }
-      ]
-    };
-    
-    const { resources } = await roadmapsContainer.items.query(querySpec).fetchAll();
-    return resources[0];
-  } catch (error) {
-    console.error("Error getting roadmap from Cosmos DB:", error);
-    throw error;
-  }
-};
+// Initialize the community containers
+studyGroupsContainer = database.container(studyGroupsContainerId);
+communityDiscussionsContainer = database.container(communityDiscussionsContainerId);
+upcomingEventsContainer = database.container(upcomingEventsContainerId);
+sharedResourcesContainer = database.container(sharedResourcesContainerId);
 
 /**
- * Get all roadmaps for a user
- * @param {string} userId - The user ID
- * @returns {Promise<Array>} Array of roadmap objects
+ * Fetch all study groups
+ * @returns {Promise<Array>} Array of study groups
  */
-export const getUserRoadmaps = async (userId) => {
+export const getStudyGroupsFromDb = async () => {
   try {
-    // Ensure database and containers exist
-    await ensureDbSetup();
-    
-    const querySpec = {
-      query: "SELECT * FROM c WHERE c.userId = @userId ORDER BY c.createdAt DESC",
-      parameters: [
-        { name: "@userId", value: userId }
-      ]
-    };
-    
-    const { resources } = await roadmapsContainer.items.query(querySpec).fetchAll();
+    await ensureCommunityDbSetup();
+    const { resources } = await studyGroupsContainer.items.query("SELECT * FROM c").fetchAll();
     return resources;
   } catch (error) {
-    console.error("Error getting user roadmaps from Cosmos DB:", error);
+    console.error("Error fetching study groups:", error);
     throw error;
   }
 };
 
 /**
- * Update a roadmap
- * @param {string} roadmapId - The roadmap ID
- * @param {Object} roadmapData - The updated roadmap data
- * @param {string} userId - The user ID who owns the roadmap
- * @returns {Promise<Object>} The updated roadmap
+ * Fetch all community discussions
+ * @returns {Promise<Array>} Array of community discussions
  */
-export const updateRoadmap = async (roadmapId, roadmapData, userId) => {
+export const getCommunityDiscussionsFromDb = async () => {
   try {
-    // Ensure database and containers exist
-    await ensureDbSetup();
-    
-    // First get the existing roadmap to ensure it exists and belongs to the user
-    const existingRoadmap = await getRoadmap(roadmapId, userId);
-    
-    if (!existingRoadmap) {
-      throw new Error("Roadmap not found or access denied");
-    }
-    
-    const updatedRoadmap = {
-      ...existingRoadmap,
-      ...roadmapData,
-      updatedAt: new Date().toISOString()
-    };
-    
-    const { resource } = await roadmapsContainer.item(roadmapId, roadmapId).replace(updatedRoadmap);
-    return resource;
+    await ensureCommunityDbSetup();
+    const { resources } = await communityDiscussionsContainer.items.query("SELECT * FROM c").fetchAll();
+    return resources;
   } catch (error) {
-    console.error("Error updating roadmap in Cosmos DB:", error);
+    console.error("Error fetching community discussions:", error);
     throw error;
   }
 };
 
 /**
- * Delete a roadmap
- * @param {string} roadmapId - The roadmap ID
- * @param {string} userId - The user ID who owns the roadmap
- * @returns {Promise<void>}
+ * Fetch all upcoming events
+ * @returns {Promise<Array>} Array of upcoming events
  */
-export const deleteRoadmap = async (roadmapId, userId) => {
+export const getUpcomingEventsFromDb = async () => {
   try {
-    // Ensure database and containers exist
-    await ensureDbSetup();
-    
-    // First get the existing roadmap to ensure it exists and belongs to the user
-    const existingRoadmap = await getRoadmap(roadmapId, userId);
-    
-    if (!existingRoadmap) {
-      throw new Error("Roadmap not found or access denied");
-    }
-    
-    await roadmapsContainer.item(roadmapId, roadmapId).delete();
+    await ensureCommunityDbSetup();
+    const { resources } = await upcomingEventsContainer.items.query("SELECT * FROM c").fetchAll();
+    return resources;
   } catch (error) {
-    console.error("Error deleting roadmap from Cosmos DB:", error);
+    console.error("Error fetching upcoming events:", error);
+    throw error;
+  }
+};
+
+/**
+ * Fetch all shared resources
+ * @returns {Promise<Array>} Array of shared resources
+ */
+export const getSharedResourcesFromDb = async () => {
+  try {
+    await ensureCommunityDbSetup();
+    const { resources } = await sharedResourcesContainer.items.query("SELECT * FROM c").fetchAll();
+    return resources;
+  } catch (error) {
+    console.error("Error fetching shared resources:", error);
     throw error;
   }
 };

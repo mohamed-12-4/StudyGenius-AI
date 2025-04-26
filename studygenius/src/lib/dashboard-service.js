@@ -2,6 +2,12 @@
 
 import { getUserCourses, getCourse } from './azure-cosmos';
 import { getDashboardStats, recordUserLogin } from './user-stats';
+import {
+  getStudyGroupsFromDb,
+  getCommunityDiscussionsFromDb,
+  getUpcomingEventsFromDb,
+  getSharedResourcesFromDb
+} from './azure-cosmos';
 
 /**
  * Get upcoming tasks from study plans across all user courses
@@ -332,6 +338,61 @@ export const getRecommendedResources = async (userId) => {
 };
 
 /**
+ * Fetch study groups for the community page
+ * @returns {Promise<Array>} Array of study groups
+ */
+export const getStudyGroups = async () => {
+  return await getStudyGroupsFromDb();
+};
+
+/**
+ * Fetch community discussions for the community page
+ * @returns {Promise<Array>} Array of discussions
+ */
+export const getCommunityDiscussions = async () => {
+  return await getCommunityDiscussionsFromDb();
+};
+
+/**
+ * Fetch upcoming events for the community page
+ * @returns {Promise<Array>} Array of events
+ */
+export const getUpcomingEvents = async () => {
+  return await getUpcomingEventsFromDb();
+};
+
+/**
+ * Fetch shared resources for the community page
+ * @returns {Promise<Array>} Array of shared resources
+ */
+export const getSharedResources = async () => {
+  return await getSharedResourcesFromDb();
+};
+
+/**
+ * Fetch community stats for the community page
+ * @returns {Promise<Object>} Object containing stats (studyBuddies, activeDiscussions, sharedResources)
+ */
+export const getCommunityStats = async () => {
+  try {
+    const [studyGroups, discussions, resources] = await Promise.all([
+      getStudyGroupsFromDb(),
+      getCommunityDiscussionsFromDb(),
+      getSharedResourcesFromDb()
+    ]);
+
+    return {
+      studyBuddies: studyGroups.length,
+      activeDiscussions: discussions.length,
+      sharedResources: resources.length
+    };
+  } catch (error) {
+    console.error("Error fetching community stats:", error);
+    throw error;
+  }
+};
+
+/**
  * Get all dashboard data needed for display
  * @param {string} userId - The user ID
  * @returns {Promise<Object>} Complete dashboard data
@@ -367,6 +428,32 @@ export const getDashboardData = async (userId) => {
     };
   } catch (error) {
     console.error("Error getting dashboard data:", error);
+    throw error;
+  }
+};
+
+/**
+ * Create a new discussion post
+ * @param {Object} discussionData - The discussion data (title, content)
+ * @returns {Promise<Object>} The created discussion
+ */
+export const createDiscussion = async (discussionData) => {
+  try {
+    const response = await fetch('/api/discussions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(discussionData),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to create discussion');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error creating discussion:', error);
     throw error;
   }
 };
