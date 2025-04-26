@@ -52,7 +52,32 @@ const studyGroups = [
   }
 ];
 
-// Sample data for community discussions
+// Add AI chatbot data
+const aiChatbots = [
+  {
+    id: 1,
+    name: "StudyBot",
+    initials: "SB",
+    role: "Study Strategy Expert",
+    color: "primary"
+  },
+  {
+    id: 2,
+    name: "MathBot",
+    initials: "MB", 
+    role: "Math Expert",
+    color: "secondary"
+  },
+  {
+    id: 3, 
+    name: "ReviewBot",
+    initials: "RB",
+    role: "Peer Reviewer",
+    color: "success"
+  }
+];
+
+// Modify a discussion to include AI responses
 const communityDiscussions = [
   {
     id: 1,
@@ -65,7 +90,27 @@ const communityDiscussions = [
     replies: 15,
     views: 128,
     timePosted: "4 hours ago",
-    isHot: true
+    isHot: true,
+    responses: [
+      {
+        id: 1,
+        author: aiChatbots[0],
+        text: "Let me help explain wave-particle duality. It's a central concept in quantum mechanics where particles can exhibit both wave and particle properties...",
+        timePosted: "3 hours ago"
+      },
+      {
+        id: 2,
+        author: aiChatbots[1],
+        text: "Adding to StudyBot's explanation, we can see this mathematically through the de Broglie equation: λ = h/p...",
+        timePosted: "3 hours ago"
+      },
+      {
+        id: 3,
+        author: aiChatbots[2],
+        text: "Great explanations! I'd also suggest checking out the double-slit experiment visualization in our resources section...",
+        timePosted: "3 hours ago"
+      }
+    ]
   },
   {
     id: 2,
@@ -307,6 +352,38 @@ export default function Community() {
                     </div>
                   </div>
                 </div>
+                {/* AI Responses */}
+                {discussion.responses && (
+                  <div className="mt-4 pl-12 space-y-4">
+                    {discussion.responses.map((response) => (
+                      <div key={response.id} className="flex items-start">
+                        <div className="flex-shrink-0 mr-3">
+                          <div className={`h-8 w-8 rounded-full bg-${response.author.color}-100 dark:bg-${response.author.color}-900/50 flex items-center justify-center`}>
+                            <span className={`text-${response.author.color}-600 dark:text-${response.author.color}-400 text-xs font-medium`}>
+                              {response.author.initials}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center mb-1">
+                            <span className="text-sm font-medium text-gray-900 dark:text-white mr-2">
+                              {response.author.name}
+                            </span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              {response.author.role}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-600 dark:text-gray-300">
+                            {response.text}
+                          </p>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            {response.timePosted}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
             
