@@ -1,6 +1,7 @@
 'use server';
 
 import { CosmosClient } from "@azure/cosmos";
+import { ID } from "appwrite";
 
 // Azure Cosmos DB configuration
 const endpoint = process.env.AZURE_COSMOS_ENDPOINT;
@@ -490,6 +491,84 @@ export const getSharedResourcesFromDb = async () => {
     return resources;
   } catch (error) {
     console.error("Error fetching shared resources:", error);
+    throw error;
+  }
+};
+
+/**
+ * Create a new community
+ * @param {Object} communityData - The community data (name, description)
+ * @param {string} userId - The user ID who creates the community
+ * @returns {Promise<Object>} The created community
+ */
+export const createCommunity = async (communityData, userId) => {
+  try {
+    await ensureCommunityDbSetup();
+    const timestamp = new Date().toISOString();
+    const community = {
+      ...communityData,
+      ownerId: userId,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+    const { resource } = await studyGroupsContainer.items.create(community);
+    return resource;
+  } catch (error) {
+    console.error("Error creating community:", error);
+    throw error;
+  }
+};
+
+/**
+ * Create a new post in a community
+ * @param {string} communityId - The community ID
+ * @param {string} userId - The user ID who posts
+ * @param {string} content - The post content
+ * @param {Array} attachments - Array of attachment objects { blobId, name, url, contentType, size }
+ * @returns {Promise<Object>} The created post
+ */
+export const createPost = async (communityId, userId, content, attachments = []) => {
+  try {
+    await ensureCommunityDbSetup();
+    const timestamp = new Date().toISOString();
+    const uniqueId = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    
+    const post = {
+      id: uniqueId, // Explicitly set a unique ID
+      communityId,
+      userId,
+      content,
+      attachments,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+    
+    const { resource } = await communityDiscussionsContainer.items.create(post);
+    return resource;
+  } catch (error) {
+    console.error("Error creating post:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get all posts for a community
+ * @param {string} communityId - The community ID
+ * @returns {Promise<Array>} Array of post objects
+ */
+export const getCommunityPosts = async (communityId) => {
+  try {
+    await ensureCommunityDbSetup();
+    const querySpec = {
+      query: "SELECT * FROM c WHERE c.communityId = @communityId ORDER BY c.createdAt DESC",
+      parameters: [
+        { name: "@communityId", value: communityId }
+      ]
+    };
+    const { resources } = await communityDiscussionsContainer.items.query(querySpec).fetchAll();
+    return resources;
+  } catch (error) {
+    console.error("Error getting community posts from Cosmos DB:", error);
     throw error;
   }
 };
